@@ -1,31 +1,54 @@
 ﻿@inherits LayoutComponentBase
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+<nav class="navbar navbar-expand-lg custom-navbar fixed-top">
     <div class="container">
-        <a class="navbar-brand d-flex align-items-center" href="/">
-            <img src="/images/logo.png" alt="CLASS Logo" height="40"/>
+
+        <a class="navbar-brand" href="/">
+            <img src="/images/logo_text.png" alt="CLASS Logo" />
         </a>
 
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+        <button class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbarContent">
             <span class="navbar-toggler-icon"></span>
         </button>
 
         <div class="collapse navbar-collapse" id="navbarContent">
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
-                    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+                    <NavLink class="nav-link custom-link"
+                             href="/"
+                             Match="NavLinkMatch.All">
+                        Home
+                    </NavLink>
                 </li>
+
                 <li class="nav-item">
-                    <NavLink class="nav-link" href="/angebote">Angebote</NavLink>
+                    <NavLink class="nav-link custom-link"
+                             href="/nachhilfe">
+                        Nachhilfe
+                    </NavLink>
                 </li>
+
                 <li class="nav-item">
-                    <NavLink class="nav-link" href="/login">Login</NavLink>
+                    <NavLink class="nav-link custom-link"
+                             href="/dashboard">
+                        Dashboard
+                    </NavLink>
+                </li>
+
+                <li class="nav-item">
+                    <NavLink class="nav-link custom-link"
+                             href="/profil">
+                        Profil
+                    </NavLink>
                 </li>
             </ul>
         </div>
     </div>
 </nav>
 
-<div class="container mt-4">
+<div class="page-content">
     @Body
 </div>
