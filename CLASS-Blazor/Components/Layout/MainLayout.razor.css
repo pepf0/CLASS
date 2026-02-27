@@ -65,9 +65,14 @@
 }
 
 .page-content {
-    padding-top: 110px;
-    padding-left: 4rem;
-    padding-right: 4rem;
+    padding-top: 140px;
+    max-width: 900px;
+    margin: 0 auto;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;     /* horizontal zentrieren */
+    text-align: center;      /* Text zentrieren */
 }
 
 @media (max-width: 768px) {

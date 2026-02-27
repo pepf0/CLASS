@@ -9,13 +9,11 @@ body {
     padding: 0;
     color: #111;
 
-background: radial-gradient(    
-    circle at 30% 20%,
-    #ffffff 0%,
-    #efe6ff 40%,
-    #dbcaff 75%,
-    #cbb6ff 100%
-);
+    background: radial-gradient(circle at 30% 20%,
+            #ffffff 0%,
+            #efe6ff 40%,
+            #dbcaff 75%,
+            #cbb6ff 100%);
     min-height: 100vh;
 }
 
@@ -127,4 +125,4 @@ h1:focus {
 
 .blazor-error-boundary::after {
     content: "An error has occurred.";
-}   
+}
