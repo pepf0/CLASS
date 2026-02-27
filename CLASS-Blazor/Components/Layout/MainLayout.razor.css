@@ -19,7 +19,7 @@
 /* ============================= */
 
 .navbar-brand img {
-    height: 46px;
+    height: 40px;
 }
 
 /* ============================= */
@@ -62,4 +62,17 @@
 
 .custom-navbar .nav-link.custom-link.active::after {
     width: 100%;
+}
+
+.page-content {
+    padding-top: 110px;
+    padding-left: 4rem;
+    padding-right: 4rem;
+}
+
+@media (max-width: 768px) {
+    .page-content {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
 }

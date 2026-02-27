@@ -2,12 +2,21 @@
 /* Global Typography */
 /* ============================= */
 
-html, body {
+html,
+body {
     font-family: 'Inter', sans-serif;
     margin: 0;
     padding: 0;
     color: #111;
-    background-color: #fff;
+
+background: radial-gradient(    
+    circle at 30% 20%,
+    #ffffff 0%,
+    #efe6ff 40%,
+    #dbcaff 75%,
+    #cbb6ff 100%
+);
+    min-height: 100vh;
 }
 
 /* ============================= */
@@ -51,7 +60,12 @@ a:hover {
 /* Headings */
 /* ============================= */
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     font-weight: 600;
     letter-spacing: -0.3px;
 }
@@ -81,14 +95,14 @@ h1:focus {
 }
 
 /* Floating Labels */
-.form-floating > .form-control-plaintext::placeholder,
-.form-floating > .form-control::placeholder {
+.form-floating>.form-control-plaintext::placeholder,
+.form-floating>.form-control::placeholder {
     color: var(--bs-secondary-color);
     text-align: end;
 }
 
-.form-floating > .form-control-plaintext:focus::placeholder,
-.form-floating > .form-control:focus::placeholder {
+.form-floating>.form-control-plaintext:focus::placeholder,
+.form-floating>.form-control:focus::placeholder {
     text-align: start;
 }
 
@@ -113,4 +127,4 @@ h1:focus {
 
 .blazor-error-boundary::after {
     content: "An error has occurred.";
-}
+}   
