@@ -68,6 +68,23 @@ h6 {
     letter-spacing: -0.3px;
 }
 
+h1 {
+    font-size: 3.5rem;      /* größer */
+    line-height: 1.1;
+    letter-spacing: -1px;
+    margin-bottom: 1rem;
+}
+
+h2 {
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
 h1:focus {
     outline: none;
 }
@@ -125,4 +142,28 @@ h1:focus {
 
 .blazor-error-boundary::after {
     content: "An error has occurred.";
+}
+
+.highlight {
+    text-decoration: underline;
+    text-decoration-thickness: 4px;
+    text-underline-offset: 6px;
+    text-decoration-color: #6100cf; /* dein Lila */
+}
+
+/* ============================= */
+/* Home Image */
+/* ============================= */
+
+.home-image {
+    display: block;
+    margin: 3rem auto 0 auto;   /* zentriert + Abstand oben */
+    
+    max-width: 800px;           /* mittelgroß */
+    width: 100%;                /* responsive */
+    
+    border: 1.5px solid #000;   /* normal bis leicht dünn */
+    border-radius: 20px;        /* großzügig modern */
+    
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); /* subtil modern */
 }
