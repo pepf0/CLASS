@@ -5,8 +5,12 @@
 .custom-navbar {
     --bs-nav-link-color: #000;
     --bs-nav-link-hover-color: #000;
-    background: transparent !important;
-    padding: 1.6rem 0;
+
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+
+    padding: 0.9rem 0;
 }
 
 /* Abstand wegen fixed navbar */
@@ -71,8 +75,10 @@
 
     display: flex;
     flex-direction: column;
-    align-items: center;     /* horizontal zentrieren */
-    text-align: center;      /* Text zentrieren */
+    align-items: center;
+    /* horizontal zentrieren */
+    text-align: center;
+    /* Text zentrieren */
 }
 
 @media (max-width: 768px) {

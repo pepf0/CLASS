@@ -69,7 +69,8 @@ h6 {
 }
 
 h1 {
-    font-size: 3.5rem;      /* größer */
+    font-size: 3.5rem;
+    /* größer */
     line-height: 1.1;
     letter-spacing: -1px;
     margin-bottom: 1rem;
@@ -148,7 +149,8 @@ h1:focus {
     text-decoration: underline;
     text-decoration-thickness: 4px;
     text-underline-offset: 6px;
-    text-decoration-color: #6100cf; /* dein Lila */
+    text-decoration-color: #6100cf;
+    /* dein Lila */
 }
 
 /* ============================= */
@@ -157,13 +159,189 @@ h1:focus {
 
 .home-image {
     display: block;
-    margin: 3rem auto 0 auto;   /* zentriert + Abstand oben */
-    
-    max-width: 800px;           /* mittelgroß */
-    width: 100%;                /* responsive */
-    
-    border: 1.5px solid #000;   /* normal bis leicht dünn */
-    border-radius: 20px;        /* großzügig modern */
-    
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); /* subtil modern */
+    margin: 3rem auto 0 auto;
+    /* zentriert + Abstand oben */
+
+    max-width: 800px;
+    /* mittelgroß */
+    width: 100%;
+    /* responsive */
+
+    border: 1.5px solid #000;
+    /* normal bis leicht dünn */
+    border-radius: 20px;
+    /* großzügig modern */
+
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    /* subtil modern */
+}
+
+/* ============================= */
+/* Hero Buttons */
+/* ============================= */
+
+.hero-buttons {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+/* Primary Button */
+.btn-primary-custom {
+    padding: 0.9rem 2rem;
+    background: linear-gradient(135deg, #7a3cff, #5a1edb);
+    color: #fff;
+    font-weight: 600;
+    border: 1.5px solid #7a3cff;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary-custom:hover {
+    background: transparent;
+    color: black;
+}
+
+/* Secondary Button */
+.btn-secondary-custom {
+    padding: 0.9rem 2rem;
+    background: transparent;
+    color: #000;
+    font-weight: 600;
+    border: 1.5px solid #7a3cff;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.btn-secondary-custom:hover {
+    background: #7a3cff;
+    color: #fff;
+}
+
+/* ============================= */
+/* Trustbar */
+/* ============================= */
+
+.trustbar {
+    display: block;
+    margin: 1rem auto 4rem auto;
+    /* Abstand oben + zentriert */
+
+    height: 25px;
+    /* feste, saubere Höhe */
+    width: auto;
+    /* Seitenverhältnis behalten */
+}
+
+/* ============================= */
+/* WHY SECTION */
+/* ============================= */
+
+.why-title {
+    margin-top: 5rem;
+    margin-bottom: 3rem;
+}
+
+.why-section {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    /* Bild etwas größer */
+    gap: 3.5rem;
+    align-items: center;
+}
+
+/* LEFT IMAGE */
+
+.why-left img {
+    width: 100%;
+    border-radius: 24px;
+    border: 1px solid #000;
+    display: block;
+    margin: 0 auto;
+}
+
+/* RIGHT TEXT */
+
+.why-right {
+    text-align: left;
+}
+
+.why-item {
+    padding: 1.2rem 0;
+    /* weniger vertikal */
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.why-item:first-child {
+    border-top: none;
+}
+
+.why-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.why-head h3 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+.why-head span {
+    font-size: 0.9rem;
+    opacity: 0.5;
+    font-family: monospace;
+}
+
+.why-item p {
+    margin-top: 0.4rem;
+    margin-bottom: 0;
+    color: #333;
+    line-height: 1.5;
+}
+
+/* CTA Button */
+
+.why-cta {
+    display: inline-block;
+    margin-top: 1.5rem;
+    /* näher am letzten Punkt */
+    padding: 0.9rem 1.8rem;
+    background: #000;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.why-cta:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+/* Responsive */
+
+@media (max-width: 900px) {
+    .why-section {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .why-right {
+        text-align: center;
+    }
+
+    .why-head {
+        justify-content: center;
+        gap: 1rem;
+    }
+
+    .why-left img {
+        max-width: 500px;
+    }
 }
