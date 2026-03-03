@@ -1,54 +1,63 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 <nav class="navbar navbar-expand-lg custom-navbar fixed-top">
     <div class="container">
-
         <a class="navbar-brand" href="/">
             <img src="/images/logo_text.png" alt="CLASS Logo" />
         </a>
 
-        <button class="navbar-toggler"
+        <ul class="navbar-nav ms-auto desktop-nav">
+            <li class="nav-item">
+                <NavLink class="nav-link custom-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link custom-link" href="/nachhilfe">Nachhilfe</NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link custom-link" href="/dashboard">Dashboard</NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link custom-link" href="/profil">Profil</NavLink>
+            </li>
+        </ul>
+
+        <button class="mobile-menu-btn"
                 type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#navbarContent">
-            <span class="navbar-toggler-icon"></span>
+                @onclick="ToggleSidebar"
+                aria-label="Menue oeffnen"
+                aria-expanded="@IsSidebarOpen">
+            <span></span>
+            <span></span>
+            <span></span>
         </button>
-
-        <div class="collapse navbar-collapse" id="navbarContent">
-            <ul class="navbar-nav ms-auto">
-                <li class="nav-item">
-                    <NavLink class="nav-link custom-link"
-                             href="/"
-                             Match="NavLinkMatch.All">
-                        Home
-                    </NavLink>
-                </li>
-
-                <li class="nav-item">
-                    <NavLink class="nav-link custom-link"
-                             href="/nachhilfe">
-                        Nachhilfe
-                    </NavLink>
-                </li>
-
-                <li class="nav-item">
-                    <NavLink class="nav-link custom-link"
-                             href="/dashboard">
-                        Dashboard
-                    </NavLink>
-                </li>
-
-                <li class="nav-item">
-                    <NavLink class="nav-link custom-link"
-                             href="/profil">
-                        Profil
-                    </NavLink>
-                </li>
-            </ul>
-        </div>
     </div>
 </nav>
+
+<div class="mobile-overlay @(IsSidebarOpen ? "show" : string.Empty)" @onclick="CloseSidebar"></div>
+
+<aside class="mobile-sidebar @(IsSidebarOpen ? "open" : string.Empty)">
+    <nav class="mobile-sidebar-nav">
+        <NavLink class="mobile-link" href="/" Match="NavLinkMatch.All" @onclick="CloseSidebar">Home</NavLink>
+        <NavLink class="mobile-link" href="/nachhilfe" @onclick="CloseSidebar">Nachhilfe</NavLink>
+        <NavLink class="mobile-link" href="/dashboard" @onclick="CloseSidebar">Dashboard</NavLink>
+        <NavLink class="mobile-link" href="/profil" @onclick="CloseSidebar">Profil</NavLink>
+    </nav>
+</aside>
 
 <div class="page-content">
     @Body
 </div>
+
+@code {
+    private bool IsSidebarOpen;
+
+    private void ToggleSidebar()
+    {
+        IsSidebarOpen = !IsSidebarOpen;
+    }
+
+    private void CloseSidebar()
+    {
+        IsSidebarOpen = false;
+    }
+}

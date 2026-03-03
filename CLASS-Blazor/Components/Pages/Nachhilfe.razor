@@ -2,5 +2,78 @@
 
 <PageTitle>Nachhilfe</PageTitle>
 
-<h1>Nachhilfe</h1>
-<p>Hier werden alle Angebote angezeigt.</p>
+<section class="tutoring-page">
+    <div class="tutoring-header">
+        <h1>Nachhilfeangebote</h1>
+        <p>Finde passende Tutorinnen und Tutoren nach Fach, Bewertung und Preis.</p>
+    </div>
+
+    <div class="tutor-grid">
+        @foreach (var tutor in Tutors)
+        {
+            <article class="tutor-card">
+                <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
+
+                <div class="tutor-content">
+                    <h3>@tutor.Name</h3>
+                    <p class="tutor-school">@tutor.SchoolInfo</p>
+
+                    <div class="tutor-subjects">
+                        @foreach (var subject in tutor.Subjects)
+                        {
+                            <span class="subject-chip">@subject</span>
+                        }
+                    </div>
+
+                    <div class="tutor-footer">
+                        <div class="rating" aria-label="@($"{tutor.Rating} von 5 Sternen")">
+                            <span class="stars" aria-hidden="true">
+                                @for (var i = 0; i < 5; i++)
+                                {
+                                    if (i < GetFilledStars(tutor.Rating))
+                                    {
+                                        <span class="star filled">&#9733;</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="star">&#9734;</span>
+                                    }
+                                }
+                            </span>
+                            <span class="rating-text">@tutor.Rating.ToString("0.0") (@tutor.ReviewCount)</span>
+                        </div>
+                        <span class="price">@tutor.PricePerHour EUR / h</span>
+                    </div>
+                </div>
+            </article>
+        }
+    </div>
+</section>
+
+@code {
+    private readonly List<TutorOffer> Tutors =
+    [
+        new("Lena Gruber", "4AHIT, HTL Wien West", ["Mathe", "Elektrotechnik", "Physik"], 4.9m, 23, 24, "https://i.pravatar.cc/300?img=11"),
+        new("David Kaya", "5BHIF, HTL Wien West", ["Programmieren", "Netzwerktechnik", "Informatik"], 4.8m, 17, 26, "https://i.pravatar.cc/300?img=14"),
+        new("Mila Novak", "3AHME, HTL Wien West", ["Deutsch", "Englisch", "Geschichte"], 4.7m, 12, 21, "https://i.pravatar.cc/300?img=5"),
+        new("Jonas Steiner", "4CHIT, HTL Wien West", ["Angewandte Mathematik", "Mechanik", "CAD"], 4.6m, 19, 25, "https://i.pravatar.cc/300?img=15"),
+        new("Sara Yildiz", "5AHME, HTL Wien West", ["Chemie", "Biologie", "Labor"], 5.0m, 9, 27, "https://i.pravatar.cc/300?img=45"),
+        new("Marko Petrovic", "4BHIT, HTL Wien West", ["Datenbanken", "C#", "Webentwicklung"], 4.9m, 28, 29, "https://i.pravatar.cc/300?img=33")
+    ];
+
+    private static int GetFilledStars(decimal rating)
+    {
+        var rounded = (int)Math.Round(rating, MidpointRounding.AwayFromZero);
+        return Math.Clamp(rounded, 0, 5);
+    }
+
+    private sealed record TutorOffer(
+        string Name,
+        string SchoolInfo,
+        string[] Subjects,
+        decimal Rating,
+        int ReviewCount,
+        int PricePerHour,
+        string ImageUrl
+    );
+}
