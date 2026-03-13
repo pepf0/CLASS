@@ -2,64 +2,157 @@
 
 <PageTitle>Nachhilfe</PageTitle>
 
-<section class="tutoring-page">
+<section class="tutoring-page page-with-footer-space">
     <div class="tutoring-header">
         <h1>Nachhilfeangebote</h1>
-        <p>Finde passende Tutorinnen und Tutoren nach Fach, Bewertung und Preis.</p>
+        <p>Finde passende Tutorinnen und Tutoren nach Fach, Bewertung, Preis und Gültigkeit.</p>
     </div>
 
-    <div class="tutor-grid">
-        @foreach (var tutor in Tutors)
-        {
-            <article class="tutor-card">
-                <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
+    <section class="tutor-filters" aria-label="Filter fuer Nachhilfeangebote">
+        <div class="filter-field">
+            <label for="subject-filter">Fach</label>
+            <select id="subject-filter" class="filter-input" @bind="SelectedSubject">
+                <option value="">Alle Faecher</option>
+                @foreach (var subject in AvailableSubjects)
+                {
+                    <option value="@subject">@subject</option>
+                }
+            </select>
+        </div>
 
-                <div class="tutor-content">
-                    <h3>@tutor.Name</h3>
-                    <p class="tutor-school">@tutor.SchoolInfo</p>
+        <div class="filter-field">
+            <label for="price-filter">Max. Preis pro Stunde</label>
+            <input id="price-filter"
+                   class="filter-input"
+                   type="number"
+                   min="0"
+                   step="1"
+                   placeholder="z. B. 25"
+                   @bind="MaxPriceInput" />
+        </div>
 
-                    <div class="tutor-subjects">
-                        @foreach (var subject in tutor.Subjects)
-                        {
-                            <span class="subject-chip">@subject</span>
-                        }
-                    </div>
+        <div class="filter-field">
+            <label for="date-filter">Gueltig bis mindestens</label>
+            <input id="date-filter" class="filter-input" type="date" @bind="AvailableUntil" />
+        </div>
 
-                    <div class="tutor-footer">
-                        <div class="rating" aria-label="@($"{tutor.Rating} von 5 Sternen")">
-                            <span class="stars" aria-hidden="true">
-                                @for (var i = 0; i < 5; i++)
-                                {
-                                    if (i < GetFilledStars(tutor.Rating))
-                                    {
-                                        <span class="star filled">&#9733;</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="star">&#9734;</span>
-                                    }
-                                }
-                            </span>
-                            <span class="rating-text">@tutor.Rating.ToString("0.0") (@tutor.ReviewCount)</span>
+        <label class="filter-toggle">
+            <input type="checkbox" @bind="OnlyTopRated" />
+            <span>Nur Angebote ab 4 Sternen</span>
+        </label>
+
+        <button type="button" class="filter-reset" @onclick="ResetFilters">Filter zuruecksetzen</button>
+    </section>
+
+    <div class="results-summary">
+        <span>@FilteredTutors.Count Angebote</span>
+        <span>Sortiert nach Ablaufdatum, Bewertung und Preis</span>
+    </div>
+
+    @if (FilteredTutors.Count == 0)
+    {
+        <div class="empty-state">
+            <h3>Keine passenden Angebote gefunden</h3>
+            <p>Passe die Filter an oder setze sie zurueck.</p>
+        </div>
+    }
+    else
+    {
+        <div class="tutor-grid">
+            @foreach (var tutor in FilteredTutors)
+            {
+                <article class="tutor-card">
+                    <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
+
+                    <div class="tutor-content">
+                        <div class="tutor-topline">
+                            <div>
+                                <h3>@tutor.Name</h3>
+                                <p class="tutor-school">@tutor.SchoolInfo</p>
+                            </div>
+                            <span class="expiry-badge">Gueltig bis @tutor.ExpiresOn.ToString("dd.MM.yyyy")</span>
                         </div>
-                        <span class="price">@tutor.PricePerHour EUR / h</span>
+
+                        <div class="tutor-subjects">
+                            @foreach (var subject in tutor.Subjects)
+                            {
+                                <span class="subject-chip">@subject</span>
+                            }
+                        </div>
+
+                        <div class="tutor-footer">
+                            <div class="rating" aria-label="@($"{tutor.Rating} von 5 Sternen")">
+                                <span class="stars" aria-hidden="true">
+                                    @for (var i = 0; i < 5; i++)
+                                    {
+                                        if (i < GetFilledStars(tutor.Rating))
+                                        {
+                                            <span class="star filled">&#9733;</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="star">&#9734;</span>
+                                        }
+                                    }
+                                </span>
+                                <span class="rating-text">@tutor.Rating.ToString("0.0") (@tutor.ReviewCount)</span>
+                            </div>
+                            <span class="price">@tutor.PricePerHour EUR / h</span>
+                        </div>
                     </div>
-                </div>
-            </article>
-        }
-    </div>
+                </article>
+            }
+        </div>
+    }
 </section>
 
 @code {
+    private static readonly DateOnly Today = new(2026, 3, 12);
+
     private readonly List<TutorOffer> Tutors =
     [
-        new("Lena Gruber", "4AHIT, HTL Wien West", ["Mathe", "Elektrotechnik", "Physik"], 4.9m, 23, 24, "https://i.pravatar.cc/300?img=11"),
-        new("David Kaya", "5BHIF, HTL Wien West", ["Programmieren", "Netzwerktechnik", "Informatik"], 4.8m, 17, 26, "https://i.pravatar.cc/300?img=14"),
-        new("Mila Novak", "3AHME, HTL Wien West", ["Deutsch", "Englisch", "Geschichte"], 4.7m, 12, 21, "https://i.pravatar.cc/300?img=5"),
-        new("Jonas Steiner", "4CHIT, HTL Wien West", ["Angewandte Mathematik", "Mechanik", "CAD"], 4.6m, 19, 25, "https://i.pravatar.cc/300?img=15"),
-        new("Sara Yildiz", "5AHME, HTL Wien West", ["Chemie", "Biologie", "Labor"], 5.0m, 9, 27, "https://i.pravatar.cc/300?img=45"),
-        new("Marko Petrovic", "4BHIT, HTL Wien West", ["Datenbanken", "C#", "Webentwicklung"], 4.9m, 28, 29, "https://i.pravatar.cc/300?img=33")
+        new("Lena Gruber", "4AHIT, HTL Wien West", ["Mathe", "Elektrotechnik", "Physik"], 4.9m, 23, 24, new DateOnly(2026, 3, 15), "https://i.pravatar.cc/300?img=11"),
+        new("David Kaya", "5BHIF, HTL Wien West", ["Programmieren", "Netzwerktechnik", "Informatik"], 4.8m, 17, 26, new DateOnly(2026, 3, 19), "https://i.pravatar.cc/300?img=14"),
+        new("Mila Novak", "3AHME, HTL Wien West", ["Deutsch", "Englisch", "Geschichte"], 4.7m, 12, 21, new DateOnly(2026, 3, 14), "https://i.pravatar.cc/300?img=5"),
+        new("Jonas Steiner", "4CHIT, HTL Wien West", ["Angewandte Mathematik", "Mechanik", "CAD"], 4.6m, 19, 25, new DateOnly(2026, 3, 18), "https://i.pravatar.cc/300?img=15"),
+        new("Sara Yildiz", "5AHME, HTL Wien West", ["Chemie", "Biologie", "Labor"], 5.0m, 9, 27, new DateOnly(2026, 3, 13), "https://i.pravatar.cc/300?img=45"),
+        new("Marko Petrovic", "4BHIT, HTL Wien West", ["Datenbanken", "C#", "Webentwicklung"], 4.9m, 28, 29, new DateOnly(2026, 3, 21), "https://i.pravatar.cc/300?img=33")
     ];
+
+    private string SelectedSubject { get; set; } = string.Empty;
+
+    private string MaxPriceInput { get; set; } = string.Empty;
+
+    private bool OnlyTopRated { get; set; }
+
+    private DateOnly? AvailableUntil { get; set; }
+
+    private IEnumerable<string> AvailableSubjects =>
+        Tutors.SelectMany(t => t.Subjects)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(subject => subject);
+
+    private List<TutorOffer> FilteredTutors =>
+        Tutors.Where(tutor => tutor.ExpiresOn >= Today)
+            .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
+            .Where(tutor => !OnlyTopRated || tutor.Rating >= 4.0m)
+            .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
+            .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value)
+            .OrderBy(tutor => tutor.ExpiresOn)
+            .ThenByDescending(tutor => tutor.Rating)
+            .ThenBy(tutor => tutor.PricePerHour)
+            .ToList();
+
+    private int? MaxPrice =>
+        int.TryParse(MaxPriceInput, out var value) ? value : null;
+
+    private void ResetFilters()
+    {
+        SelectedSubject = string.Empty;
+        MaxPriceInput = string.Empty;
+        OnlyTopRated = false;
+        AvailableUntil = null;
+    }
 
     private static int GetFilledStars(decimal rating)
     {
@@ -74,6 +167,7 @@
         decimal Rating,
         int ReviewCount,
         int PricePerHour,
+        DateOnly ExpiresOn,
         string ImageUrl
     );
 }

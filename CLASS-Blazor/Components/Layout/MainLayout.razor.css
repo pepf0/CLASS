@@ -3,12 +3,12 @@
 /* ============================= */
 
 .custom-navbar {
-    --bs-nav-link-color: #000;
-    --bs-nav-link-hover-color: #000;
-    background: rgba(255, 255, 255, 0.25);
+    --bs-nav-link-color: var(--color-text);
+    --bs-nav-link-hover-color: var(--color-text);
+    background: var(--surface-glass);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+    border-bottom: 1px solid var(--surface-glass-border);
     padding: 0.8rem 0;
     z-index: 1100;
 }
@@ -21,12 +21,13 @@
 
 .desktop-nav {
     display: flex;
+    align-items: center;
 }
 
 .custom-navbar ::deep .nav-link.custom-link {
     position: relative;
     display: inline-block;
-    color: #000;
+    color: var(--color-text);
     font-weight: 600;
     margin-left: 1.5rem;
     padding: 0.25rem 0;
@@ -35,7 +36,7 @@
 
 .custom-navbar ::deep .nav-link.custom-link:visited,
 .custom-navbar ::deep .nav-link.custom-link:active {
-    color: #000;
+    color: var(--color-text);
 }
 
 .custom-navbar ::deep .nav-link.custom-link::after {
@@ -45,7 +46,7 @@
     bottom: 0;
     width: 0;
     height: 2px;
-    background: #000;
+    background: var(--color-text);
     transition: width 0.25s ease;
 }
 
@@ -66,9 +67,9 @@
 .mobile-menu-btn {
     width: 44px;
     height: 44px;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--surface-border-strong);
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.68);
+    background: var(--surface-elevated);
     display: none;
     align-items: center;
     justify-content: center;
@@ -80,14 +81,58 @@
 .mobile-menu-btn span {
     width: 20px;
     height: 2px;
-    background: #222;
+    background: var(--color-text);
     border-radius: 999px;
+}
+
+.theme-toggle {
+    width: 44px;
+    height: 44px;
+    margin-left: 1.25rem;
+    border: 1px solid var(--surface-border-strong);
+    border-radius: 999px;
+    background: var(--surface-elevated);
+    color: var(--color-text);
+    font-weight: 700;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 24px rgba(10, 12, 18, 0.08);
+    transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.theme-toggle:hover {
+    transform: translateY(-1px) scale(1.02);
+    background: var(--surface-hover);
+    box-shadow: 0 14px 30px rgba(10, 12, 18, 0.14);
+}
+
+.theme-toggle:active {
+    transform: scale(0.98);
+}
+
+.theme-icon {
+    width: 20px;
+    height: 20px;
+    display: block;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.theme-icon-moon {
+    width: 21px;
+    height: 21px;
+    object-fit: contain;
 }
 
 .mobile-overlay {
     position: fixed;
     inset: 0;
-    background: transparent;
+    background: rgba(10, 12, 18, 0.35);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s ease;
@@ -109,9 +154,9 @@
     transform: translateX(100%);
     transition: transform 0.28s ease;
     z-index: 1210;
-    background: rgba(255, 255, 255, 0.32);
-    border-left: 1px solid rgba(255, 255, 255, 0.48);
-    box-shadow: -16px 0 40px rgba(24, 10, 51, 0.2);
+    background: var(--surface-glass);
+    border-left: 1px solid var(--surface-glass-border);
+    box-shadow: -16px 0 40px rgba(10, 12, 18, 0.28);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
 }
@@ -126,8 +171,13 @@
     gap: 0.35rem;
 }
 
+.mobile-theme-toggle {
+    margin: 0 0 0.5rem;
+    width: 44px;
+}
+
 .mobile-sidebar-nav ::deep .mobile-link {
-    color: #000 !important;
+    color: var(--color-text) !important;
     font-weight: 600;
     padding: 0.7rem 0.8rem;
     border-radius: 10px;
@@ -139,13 +189,13 @@
 .mobile-sidebar-nav ::deep .mobile-link:active,
 .mobile-sidebar-nav ::deep .mobile-link:hover,
 .mobile-sidebar-nav ::deep .mobile-link.active {
-    color: #000 !important;
+    color: var(--color-text) !important;
 }
 
 .mobile-sidebar-nav ::deep .mobile-link:hover,
 .mobile-sidebar-nav ::deep .mobile-link.active {
-    background: rgba(255, 255, 255, 0.58);
-    border-color: rgba(255, 255, 255, 0.72);
+    background: var(--surface-hover);
+    border-color: var(--surface-border);
 }
 
 /* ============================= */
@@ -166,6 +216,10 @@
 
 @media (max-width: 991.98px) {
     .desktop-nav {
+        display: none;
+    }
+
+    .theme-toggle {
         display: none;
     }
 

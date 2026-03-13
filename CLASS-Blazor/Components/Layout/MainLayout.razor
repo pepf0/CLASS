@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IJSRuntime JS
 
 <nav class="navbar navbar-expand-lg custom-navbar fixed-top">
     <div class="container">
@@ -21,6 +22,31 @@
             </li>
         </ul>
 
+        <button class="theme-toggle"
+                type="button"
+                @onclick="ToggleThemeAsync"
+                aria-label="Darkmode umschalten"
+                aria-pressed="@IsDarkMode">
+            @if (IsDarkMode)
+            {
+                <svg viewBox="0 0 24 24" class="theme-icon" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4.25"></circle>
+                    <line x1="12" y1="1.75" x2="12" y2="4.25"></line>
+                    <line x1="12" y1="19.75" x2="12" y2="22.25"></line>
+                    <line x1="1.75" y1="12" x2="4.25" y2="12"></line>
+                    <line x1="19.75" y1="12" x2="22.25" y2="12"></line>
+                    <line x1="4.75" y1="4.75" x2="6.5" y2="6.5"></line>
+                    <line x1="17.5" y1="17.5" x2="19.25" y2="19.25"></line>
+                    <line x1="17.5" y1="6.5" x2="19.25" y2="4.75"></line>
+                    <line x1="4.75" y1="19.25" x2="6.5" y2="17.5"></line>
+                </svg>
+            }
+            else
+            {
+                <img src="/images/moon-icon.png" alt="" class="theme-icon theme-icon-moon" aria-hidden="true" />
+            }
+        </button>
+
         <button class="mobile-menu-btn"
                 type="button"
                 @onclick="ToggleSidebar"
@@ -37,6 +63,30 @@
 
 <aside class="mobile-sidebar @(IsSidebarOpen ? "open" : string.Empty)">
     <nav class="mobile-sidebar-nav">
+        <button class="theme-toggle mobile-theme-toggle"
+                type="button"
+                @onclick="ToggleThemeAsync"
+                aria-label="Darkmode umschalten"
+                aria-pressed="@IsDarkMode">
+            @if (IsDarkMode)
+            {
+                <svg viewBox="0 0 24 24" class="theme-icon" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4.25"></circle>
+                    <line x1="12" y1="1.75" x2="12" y2="4.25"></line>
+                    <line x1="12" y1="19.75" x2="12" y2="22.25"></line>
+                    <line x1="1.75" y1="12" x2="4.25" y2="12"></line>
+                    <line x1="19.75" y1="12" x2="22.25" y2="12"></line>
+                    <line x1="4.75" y1="4.75" x2="6.5" y2="6.5"></line>
+                    <line x1="17.5" y1="17.5" x2="19.25" y2="19.25"></line>
+                    <line x1="17.5" y1="6.5" x2="19.25" y2="4.75"></line>
+                    <line x1="4.75" y1="19.25" x2="6.5" y2="17.5"></line>
+                </svg>
+            }
+            else
+            {
+                <img src="/images/moon-icon.png" alt="" class="theme-icon theme-icon-moon" aria-hidden="true" />
+            }
+        </button>
         <NavLink class="mobile-link" href="/" Match="NavLinkMatch.All" @onclick="CloseSidebar">Home</NavLink>
         <NavLink class="mobile-link" href="/nachhilfe" @onclick="CloseSidebar">Nachhilfe</NavLink>
         <NavLink class="mobile-link" href="/dashboard" @onclick="CloseSidebar">Dashboard</NavLink>
@@ -50,6 +100,18 @@
 
 @code {
     private bool IsSidebarOpen;
+    private bool IsDarkMode;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        IsDarkMode = await JS.InvokeAsync<bool>("themeManager.isDarkMode");
+        StateHasChanged();
+    }
 
     private void ToggleSidebar()
     {
@@ -59,5 +121,10 @@
     private void CloseSidebar()
     {
         IsSidebarOpen = false;
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        IsDarkMode = await JS.InvokeAsync<bool>("themeManager.toggleTheme");
     }
 }

@@ -1,3 +1,65 @@
+:root {
+    color-scheme: light;
+    --color-text: #111111;
+    --color-text-inverse: #ffffff;
+    --color-text-muted: #3f3f3f;
+    --color-text-soft: #585858;
+    --color-link: #005fa3;
+    --color-heading-accent: #6100cf;
+    --surface-glass: rgba(255, 255, 255, 0.28);
+    --surface-glass-border: rgba(255, 255, 255, 0.45);
+    --surface-elevated: rgba(255, 255, 255, 0.76);
+    --surface-hover: rgba(255, 255, 255, 0.58);
+    --surface-border: rgba(0, 0, 0, 0.12);
+    --surface-border-strong: rgba(0, 0, 0, 0.16);
+    --surface-panel: rgba(255, 255, 255, 0.65);
+    --surface-card: rgba(255, 255, 255, 0.8);
+    --surface-empty: rgba(255, 255, 255, 0.55);
+    --surface-input: rgba(255, 255, 255, 0.9);
+    --surface-badge: #f4f0ff;
+    --surface-chip: #efe6ff;
+    --border-badge: #ddd1fb;
+    --border-chip: #d7c0ff;
+    --shadow-card: 0 10px 30px rgba(19, 14, 39, 0.08);
+    --shadow-card-hover: 0 16px 35px rgba(19, 14, 39, 0.14);
+    --hero-primary-start: #7a3cff;
+    --hero-primary-end: #5a1edb;
+    --hero-secondary-text: #000000;
+    --why-cta-bg: #000000;
+    --why-cta-text: #ffffff;
+    --page-background: radial-gradient(circle at 30% 20%, #ffffff 0%, #efe6ff 40%, #dbcaff 75%, #cbb6ff 100%);
+}
+
+[data-theme="dark"] {
+    color-scheme: dark;
+    --color-text: #edf2ff;
+    --color-text-inverse: #111827;
+    --color-text-muted: #c7d0e5;
+    --color-text-soft: #aeb8cf;
+    --color-link: #8cc8ff;
+    --color-heading-accent: #cba6ff;
+    --surface-glass: rgba(14, 18, 30, 0.72);
+    --surface-glass-border: rgba(167, 181, 221, 0.18);
+    --surface-elevated: rgba(23, 30, 48, 0.82);
+    --surface-hover: rgba(42, 52, 79, 0.92);
+    --surface-border: rgba(166, 180, 219, 0.18);
+    --surface-border-strong: rgba(166, 180, 219, 0.26);
+    --surface-panel: rgba(19, 26, 41, 0.82);
+    --surface-card: rgba(20, 27, 44, 0.9);
+    --surface-empty: rgba(21, 28, 44, 0.72);
+    --surface-input: rgba(11, 16, 28, 0.92);
+    --surface-badge: rgba(96, 67, 171, 0.28);
+    --surface-chip: rgba(97, 69, 165, 0.25);
+    --border-badge: rgba(172, 142, 255, 0.22);
+    --border-chip: rgba(172, 142, 255, 0.24);
+    --shadow-card: 0 14px 32px rgba(3, 6, 15, 0.42);
+    --shadow-card-hover: 0 18px 42px rgba(3, 6, 15, 0.55);
+    --hero-secondary-text: #edf2ff;
+    --why-cta-bg: #edf2ff;
+    --why-cta-text: #111827;
+    --page-background: radial-gradient(circle at 20% 20%, #1b2140 0%, #10162b 38%, #0a0f1d 72%, #050810 100%);
+}
+
 /* ============================= */
 /* Global Typography */
 /* ============================= */
@@ -7,9 +69,10 @@ body {
     font-family: 'Inter', sans-serif;
     margin: 0;
     padding: 0;
-    color: #111;
-    background: radial-gradient(circle at 30% 20%, #ffffff 0%, #efe6ff 40%, #dbcaff 75%, #cbb6ff 100%);
+    color: var(--color-text);
+    background: var(--page-background);
     min-height: 100vh;
+    transition: background 0.25s ease, color 0.25s ease;
 }
 
 *,
@@ -27,7 +90,7 @@ img {
 /* ============================= */
 
 a {
-    color: #006bb7;
+    color: var(--color-link);
     text-decoration: none;
     transition: opacity 0.2s ease;
 }
@@ -41,7 +104,7 @@ a:hover {
 .mobile-sidebar .mobile-link:active,
 .mobile-sidebar .mobile-link:hover,
 .mobile-sidebar .mobile-link.active {
-    color: #000 !important;
+    color: var(--color-text) !important;
 }
 
 /* ============================= */
@@ -160,7 +223,7 @@ h1:focus {
     text-decoration: underline;
     text-decoration-thickness: 4px;
     text-underline-offset: 6px;
-    text-decoration-color: #6100cf;
+    text-decoration-color: var(--color-heading-accent);
 }
 
 /* ============================= */
@@ -177,10 +240,10 @@ h1:focus {
 
 .btn-primary-custom {
     padding: 0.9rem 2rem;
-    background: linear-gradient(135deg, #7a3cff, #5a1edb);
+    background: linear-gradient(135deg, var(--hero-primary-start), var(--hero-primary-end));
     color: #fff;
     font-weight: 600;
-    border: 1.5px solid #7a3cff;
+    border: 1.5px solid var(--hero-primary-start);
     border-radius: 8px;
     text-decoration: none;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -188,22 +251,22 @@ h1:focus {
 
 .btn-primary-custom:hover {
     background: transparent;
-    color: #000;
+    color: var(--color-text);
 }
 
 .btn-secondary-custom {
     padding: 0.9rem 2rem;
     background: transparent;
-    color: #000;
+    color: var(--hero-secondary-text);
     font-weight: 600;
-    border: 1.5px solid #7a3cff;
+    border: 1.5px solid var(--hero-primary-start);
     border-radius: 8px;
     text-decoration: none;
     transition: background 0.2s ease, color 0.2s ease;
 }
 
 .btn-secondary-custom:hover {
-    background: #7a3cff;
+    background: var(--hero-primary-start);
     color: #fff;
 }
 
@@ -212,9 +275,9 @@ h1:focus {
     margin: 3rem auto 0;
     max-width: 800px;
     width: 100%;
-    border: 1.5px solid #000;
+    border: 1.5px solid var(--color-text);
     border-radius: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-card);
 }
 
 .trustbar {
@@ -225,13 +288,22 @@ h1:focus {
     max-width: min(100%, 620px);
 }
 
+.home-page {
+    width: 100%;
+    padding-bottom: clamp(4rem, 10vw, 7rem);
+}
+
+.page-with-footer-space {
+    padding-bottom: clamp(4rem, 10vw, 7rem);
+}
+
 /* ============================= */
 /* Why Section */
 /* ============================= */
 
 .why-title {
     margin-top: 5rem;
-    margin-bottom: 3rem;
+    margin-bottom: 4.5rem;
 }
 
 .why-section {
@@ -244,7 +316,7 @@ h1:focus {
 .why-left img {
     width: 100%;
     border-radius: 24px;
-    border: 1px solid #000;
+    border: 1px solid var(--color-text);
     display: block;
     margin: 0 auto;
 }
@@ -255,7 +327,7 @@ h1:focus {
 
 .why-item {
     padding: 1.2rem 0;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    border-top: 1px solid var(--surface-border);
 }
 
 .why-item:first-child {
@@ -283,7 +355,7 @@ h1:focus {
 .why-item p {
     margin-top: 0.4rem;
     margin-bottom: 0;
-    color: #333;
+    color: var(--color-text-muted);
     line-height: 1.5;
 }
 
@@ -291,8 +363,8 @@ h1:focus {
     display: inline-block;
     margin-top: 1.5rem;
     padding: 0.9rem 1.8rem;
-    background: #000;
-    color: #fff;
+    background: var(--why-cta-bg);
+    color: var(--why-cta-text);
     text-decoration: none;
     font-weight: 600;
     border-radius: 8px;
@@ -318,8 +390,73 @@ h1:focus {
 
 .tutoring-header p {
     margin: 0 0 2rem;
-    color: #3f3f3f;
+    color: var(--color-text-muted);
     font-size: 1.05rem;
+}
+
+.tutor-filters {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 18px;
+    background: var(--surface-panel);
+    backdrop-filter: blur(8px);
+}
+
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    text-align: left;
+}
+
+.filter-field label,
+.filter-toggle span {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.filter-input {
+    width: 100%;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.8rem 0.9rem;
+    background: var(--surface-input);
+    color: var(--color-text);
+}
+
+.filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 48px;
+    text-align: left;
+}
+
+.filter-reset {
+    min-height: 48px;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: var(--color-text);
+    color: var(--color-text-inverse);
+    font-weight: 600;
+    padding: 0.8rem 1rem;
+}
+
+.results-summary {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    color: var(--color-text-soft);
+    font-size: 0.92rem;
 }
 
 .tutor-grid {
@@ -332,25 +469,25 @@ h1:focus {
 .tutor-card {
     display: flex;
     flex-direction: column;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: var(--surface-card);
+    border: 1px solid var(--surface-border);
     border-radius: 16px;
     overflow: hidden;
     backdrop-filter: blur(4px);
-    box-shadow: 0 10px 30px rgba(19, 14, 39, 0.08);
+    box-shadow: var(--shadow-card);
     transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .tutor-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 16px 35px rgba(19, 14, 39, 0.14);
+    box-shadow: var(--shadow-card-hover);
 }
 
 .tutor-image {
     width: 100%;
     height: 190px;
     object-fit: cover;
-    background: #ddd;
+    background: var(--surface-hover);
 }
 
 .tutor-content {
@@ -366,10 +503,28 @@ h1:focus {
     font-size: 1.2rem;
 }
 
+.tutor-topline {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+}
+
 .tutor-school {
     margin: 0;
-    color: #505050;
+    color: var(--color-text-soft);
     font-size: 0.95rem;
+}
+
+.expiry-badge {
+    flex-shrink: 0;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: var(--surface-badge);
+    border: 1px solid var(--border-badge);
+    color: var(--color-heading-accent);
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .tutor-subjects {
@@ -381,9 +536,9 @@ h1:focus {
 .subject-chip {
     padding: 0.3rem 0.6rem;
     border-radius: 999px;
-    background: #efe6ff;
-    color: #3f1287;
-    border: 1px solid #d7c0ff;
+    background: var(--surface-chip);
+    color: var(--color-heading-accent);
+    border: 1px solid var(--border-chip);
     font-size: 0.82rem;
     font-weight: 600;
 }
@@ -417,14 +572,31 @@ h1:focus {
 }
 
 .rating-text {
-    color: #585858;
+    color: var(--color-text-soft);
     font-size: 0.88rem;
 }
 
 .price {
     font-weight: 700;
-    color: #161616;
+    color: var(--color-text);
     white-space: nowrap;
+}
+
+.empty-state {
+    width: 100%;
+    padding: 2rem 1.5rem;
+    border-radius: 18px;
+    border: 1px dashed var(--surface-border-strong);
+    background: var(--surface-empty);
+}
+
+.empty-state h3 {
+    margin-bottom: 0.4rem;
+}
+
+.empty-state p {
+    margin: 0;
+    color: var(--color-text-soft);
 }
 
 /* ============================= */
@@ -467,11 +639,24 @@ h1:focus {
         margin-top: 2rem;
         border-radius: 14px;
     }
+
+    .tutor-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .results-summary {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
 
 @media (max-width: 640px) {
     .tutoring-header p {
         margin-bottom: 1.2rem;
+    }
+
+    .tutor-filters {
+        grid-template-columns: 1fr;
     }
 
     .tutor-grid {
@@ -480,6 +665,10 @@ h1:focus {
 
     .tutor-image {
         height: 170px;
+    }
+
+    .tutor-topline {
+        flex-direction: column;
     }
 
     .tutor-footer {
