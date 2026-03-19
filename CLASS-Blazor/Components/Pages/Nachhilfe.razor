@@ -8,11 +8,11 @@
         <p>Finde passende Tutorinnen und Tutoren nach Fach, Bewertung, Preis und Gültigkeit.</p>
     </div>
 
-    <section class="tutor-filters" aria-label="Filter fuer Nachhilfeangebote">
+    <section class="tutor-filters" aria-label="Filter für Nachhilfeangebote">
         <div class="filter-field">
             <label for="subject-filter">Fach</label>
             <select id="subject-filter" class="filter-input" @bind="SelectedSubject">
-                <option value="">Alle Faecher</option>
+                <option value="">Alle Fächer</option>
                 @foreach (var subject in AvailableSubjects)
                 {
                     <option value="@subject">@subject</option>
@@ -27,21 +27,50 @@
                    type="number"
                    min="0"
                    step="1"
-                   placeholder="z. B. 25"
+                   placeholder="z. B. 15"
                    @bind="MaxPriceInput" />
         </div>
 
         <div class="filter-field">
-            <label for="date-filter">Gueltig bis mindestens</label>
+            <label for="date-filter">Gültig bis mindestens</label>
             <input id="date-filter" class="filter-input" type="date" @bind="AvailableUntil" />
         </div>
 
-        <label class="filter-toggle">
-            <input type="checkbox" @bind="OnlyTopRated" />
-            <span>Nur Angebote ab 4 Sternen</span>
-        </label>
+        <div class="filter-field">
+            <label>Bewertung</label>
+            <div class="filter-stars" role="group" aria-label="Nach Mindestbewertung filtern">
+                @for (var i = 1; i <= 5; i++)
+                {
+                    var starValue = i;
+                    var isActive = SelectedMinRating.HasValue && starValue <= SelectedMinRating.Value;
+                    var isSelected = SelectedMinRating == starValue;
 
-        <button type="button" class="filter-reset" @onclick="ResetFilters">Filter zuruecksetzen</button>
+                    <button type="button"
+                            class="filter-star-button @(isSelected ? "selected" : string.Empty)"
+                            @onclick="() => ToggleMinRating(starValue)"
+                            aria-pressed="@isSelected"
+                            aria-label="@($"Mindestens {starValue} Sterne")">
+                        <span class="star @(isActive ? "filled" : string.Empty)">
+                            @(isActive ? "\u2605" : "\u2606")
+                        </span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <div class="filter-field filter-search-field">
+                <label for="search-filter">Suche</label>
+                <input id="search-filter"
+                       class="filter-input"
+                       type="text"
+                       placeholder="Name, Fach oder Klasse"
+                       @bind="SearchTerm"
+                       @bind:event="oninput" />
+            </div>
+
+            <button type="button" class="filter-reset" @onclick="ResetFilters">Filter zurücksetzen</button>
+        </div>
     </section>
 
     <div class="results-summary">
@@ -53,7 +82,7 @@
     {
         <div class="empty-state">
             <h3>Keine passenden Angebote gefunden</h3>
-            <p>Passe die Filter an oder setze sie zurueck.</p>
+            <p>Passe die Filter an oder setze sie zurück.</p>
         </div>
     }
     else
@@ -70,7 +99,10 @@
                                 <h3>@tutor.Name</h3>
                                 <p class="tutor-school">@tutor.SchoolInfo</p>
                             </div>
-                            <span class="expiry-badge">Gueltig bis @tutor.ExpiresOn.ToString("dd.MM.yyyy")</span>
+                            <span class="expiry-badge">
+                                <img src="/images/icons/clock_icon.svg" alt="" class="expiry-icon" aria-hidden="true" />
+                                <span>@tutor.ExpiresOn.ToString("dd.MM.yyyy")</span>
+                            </span>
                         </div>
 
                         <div class="tutor-subjects">
@@ -111,19 +143,20 @@
 
     private readonly List<TutorOffer> Tutors =
     [
-        new("Lena Gruber", "4AHIT, HTL Wien West", ["Mathe", "Elektrotechnik", "Physik"], 4.9m, 23, 24, new DateOnly(2026, 3, 15), "https://i.pravatar.cc/300?img=11"),
-        new("David Kaya", "5BHIF, HTL Wien West", ["Programmieren", "Netzwerktechnik", "Informatik"], 4.8m, 17, 26, new DateOnly(2026, 3, 19), "https://i.pravatar.cc/300?img=14"),
-        new("Mila Novak", "3AHME, HTL Wien West", ["Deutsch", "Englisch", "Geschichte"], 4.7m, 12, 21, new DateOnly(2026, 3, 14), "https://i.pravatar.cc/300?img=5"),
-        new("Jonas Steiner", "4CHIT, HTL Wien West", ["Angewandte Mathematik", "Mechanik", "CAD"], 4.6m, 19, 25, new DateOnly(2026, 3, 18), "https://i.pravatar.cc/300?img=15"),
-        new("Sara Yildiz", "5AHME, HTL Wien West", ["Chemie", "Biologie", "Labor"], 5.0m, 9, 27, new DateOnly(2026, 3, 13), "https://i.pravatar.cc/300?img=45"),
-        new("Marko Petrovic", "4BHIT, HTL Wien West", ["Datenbanken", "C#", "Webentwicklung"], 4.9m, 28, 29, new DateOnly(2026, 3, 21), "https://i.pravatar.cc/300?img=33")
+        new("Dominik Kautz", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 4.7m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
+        new("Noel Hollnthoner", "3AHIT, Tagesschule", ["SEW", "Ethik", "Sport"], 4.5m, 10, 15, new DateOnly(2026, 5, 24), "/images/tutors/tutor-4.png"),
+        new("Alisandro Gourie", "3AHIT, Tagesschule", ["SEW", "NWT", "INSY"], 4.8m, 17, 18, new DateOnly(2026, 6, 9), "/images/tutors/tutor-5.png"),
+        new("Eljon Bacaj", "3AHIT, Tagesschule", ["SEW", "MEDT", "INSY"], 4.9m, 23, 19, new DateOnly(2026, 5, 18), "/images/tutors/tutor-6.png"),
+        new("Bekir Dayi", "3AHIT, Tagesschule", ["Sport"], 4.6m, 11, 16, new DateOnly(2026, 6, 17), "/images/tutors/tutor-7.png"),
     ];
 
     private string SelectedSubject { get; set; } = string.Empty;
 
+    private string SearchTerm { get; set; } = string.Empty;
+
     private string MaxPriceInput { get; set; } = string.Empty;
 
-    private bool OnlyTopRated { get; set; }
+    private int? SelectedMinRating { get; set; }
 
     private DateOnly? AvailableUntil { get; set; }
 
@@ -134,13 +167,15 @@
 
     private List<TutorOffer> FilteredTutors =>
         Tutors.Where(tutor => tutor.ExpiresOn >= Today)
+            .Where(tutor => string.IsNullOrWhiteSpace(SearchTerm)
+                || tutor.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                || tutor.Subjects.Any(subject => subject.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)))
             .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
-            .Where(tutor => !OnlyTopRated || tutor.Rating >= 4.0m)
+            .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= SelectedMinRating.Value)
             .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
             .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value)
-            .OrderBy(tutor => tutor.ExpiresOn)
-            .ThenByDescending(tutor => tutor.Rating)
-            .ThenBy(tutor => tutor.PricePerHour)
+            .OrderBy(GetTutorImageOrder)
             .ToList();
 
     private int? MaxPrice =>
@@ -148,16 +183,42 @@
 
     private void ResetFilters()
     {
+        SearchTerm = string.Empty;
         SelectedSubject = string.Empty;
         MaxPriceInput = string.Empty;
-        OnlyTopRated = false;
+        SelectedMinRating = null;
         AvailableUntil = null;
+    }
+
+    private void ToggleMinRating(int rating)
+    {
+        SelectedMinRating = SelectedMinRating == rating ? null : rating;
     }
 
     private static int GetFilledStars(decimal rating)
     {
         var rounded = (int)Math.Round(rating, MidpointRounding.AwayFromZero);
         return Math.Clamp(rounded, 0, 5);
+    }
+
+    private static int GetTutorImageOrder(TutorOffer tutor)
+    {
+        const string marker = "tutor-";
+        var imagePath = tutor.ImageUrl;
+        var start = imagePath.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+
+        if (start < 0)
+        {
+            return int.MaxValue;
+        }
+
+        start += marker.Length;
+        var end = imagePath.IndexOf('.', start);
+        var numberText = end >= 0
+            ? imagePath[start..end]
+            : imagePath[start..];
+
+        return int.TryParse(numberText, out var number) ? number : int.MaxValue;
     }
 
     private sealed record TutorOffer(

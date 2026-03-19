@@ -420,6 +420,7 @@ h1:focus {
     font-size: 0.92rem;
     font-weight: 600;
     color: var(--color-text);
+    padding-left: 0.45rem;
 }
 
 .filter-input {
@@ -437,6 +438,53 @@ h1:focus {
     gap: 0.6rem;
     min-height: 48px;
     text-align: left;
+}
+
+.filter-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    min-height: 48px;
+}
+
+.filter-star-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 999px;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.filter-star-button:hover,
+.filter-star-button:focus-visible {
+    background: rgba(242, 171, 0, 0.12);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.filter-star-button.selected {
+    background: rgba(242, 171, 0, 0.16);
+}
+
+.filter-star-button .star {
+    font-size: 1.15rem;
+}
+
+.filter-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: end;
+    gap: 1rem;
+}
+
+.filter-search-field {
+    flex: 1 1 auto;
 }
 
 .filter-reset {
@@ -485,8 +533,9 @@ h1:focus {
 
 .tutor-image {
     width: 100%;
-    height: 190px;
+    height: 220px;
     object-fit: cover;
+    object-position: center 20%;
     background: var(--surface-hover);
 }
 
@@ -501,6 +550,9 @@ h1:focus {
 .tutor-content h3 {
     margin: 0;
     font-size: 1.2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tutor-topline {
@@ -508,6 +560,11 @@ h1:focus {
     justify-content: space-between;
     align-items: flex-start;
     gap: 0.8rem;
+}
+
+.tutor-topline > div {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .tutor-school {
@@ -518,6 +575,9 @@ h1:focus {
 
 .expiry-badge {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     padding: 0.35rem 0.65rem;
     border-radius: 999px;
     background: var(--surface-badge);
@@ -525,6 +585,12 @@ h1:focus {
     color: var(--color-heading-accent);
     font-size: 0.78rem;
     font-weight: 700;
+}
+
+.expiry-icon {
+    width: 0.9rem;
+    height: 0.9rem;
+    display: block;
 }
 
 .tutor-subjects {
@@ -659,12 +725,17 @@ h1:focus {
         grid-template-columns: 1fr;
     }
 
+    .filter-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
     .tutor-grid {
         grid-template-columns: 1fr;
     }
 
     .tutor-image {
-        height: 170px;
+        height: 210px;
     }
 
     .tutor-topline {
