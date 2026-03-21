@@ -468,11 +468,8 @@ h1:focus {
     outline: none;
 }
 
-.filter-star-button.selected {
-    background: rgba(242, 171, 0, 0.16);
-}
-
 .filter-star-button .star {
+    display: inline-block;
     font-size: 1.15rem;
 }
 
@@ -635,6 +632,13 @@ h1:focus {
 
 .star.filled {
     color: #f2ab00;
+}
+
+.star.half-filled {
+    color: transparent;
+    background: linear-gradient(90deg, #f2ab00 50%, #cabd97 50%);
+    -webkit-background-clip: text;
+    background-clip: text;
 }
 
 .rating-text {

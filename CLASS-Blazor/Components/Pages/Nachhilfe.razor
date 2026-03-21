@@ -44,12 +44,16 @@
                     var starValue = i;
                     var isActive = SelectedMinRating.HasValue && starValue <= SelectedMinRating.Value;
                     var isSelected = SelectedMinRating == starValue;
+                    var ariaLabel = starValue == 5
+                        ? "Mindestens 4,5 Sterne"
+                        : $"Mindestens {starValue} Sterne";
 
                     <button type="button"
                             class="filter-star-button @(isSelected ? "selected" : string.Empty)"
                             @onclick="() => ToggleMinRating(starValue)"
                             aria-pressed="@isSelected"
-                            aria-label="@($"Mindestens {starValue} Sterne")">
+                            aria-label="@ariaLabel"
+                            title="@ariaLabel">
                         <span class="star @(isActive ? "filled" : string.Empty)">
                             @(isActive ? "\u2605" : "\u2606")
                         </span>
@@ -117,14 +121,10 @@
                                 <span class="stars" aria-hidden="true">
                                     @for (var i = 0; i < 5; i++)
                                     {
-                                        if (i < GetFilledStars(tutor.Rating))
-                                        {
-                                            <span class="star filled">&#9733;</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="star">&#9734;</span>
-                                        }
+                                        var starClass = GetStarFillClass(tutor.Rating, i);
+                                        var starSymbol = starClass == "empty" ? "\u2606" : "\u2605";
+
+                                        <span class="star @starClass">@starSymbol</span>
                                     }
                                 </span>
                                 <span class="rating-text">@tutor.Rating.ToString("0.0") (@tutor.ReviewCount)</span>
@@ -143,11 +143,11 @@
 
     private readonly List<TutorOffer> Tutors =
     [
-        new("Dominik Kautz", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 4.7m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
-        new("Noel Hollnthoner", "3AHIT, Tagesschule", ["SEW", "Ethik", "Sport"], 4.5m, 10, 15, new DateOnly(2026, 5, 24), "/images/tutors/tutor-4.png"),
-        new("Alisandro Gourie", "3AHIT, Tagesschule", ["SEW", "NWT", "INSY"], 4.8m, 17, 18, new DateOnly(2026, 6, 9), "/images/tutors/tutor-5.png"),
-        new("Eljon Bacaj", "3AHIT, Tagesschule", ["SEW", "MEDT", "INSY"], 4.9m, 23, 19, new DateOnly(2026, 5, 18), "/images/tutors/tutor-6.png"),
-        new("Bekir Dayi", "3AHIT, Tagesschule", ["Sport"], 4.6m, 11, 16, new DateOnly(2026, 6, 17), "/images/tutors/tutor-7.png"),
+        new("Dominik Kautz", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 3.9m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
+        new("Noel Hollnthoner", "3AHIT, Tagesschule", ["SEW", "Ethik", "Sport"], 4.2m, 10, 15, new DateOnly(2026, 5, 24), "/images/tutors/tutor-4.png"),
+        new("Alisandro Gourie", "3AHIT, Tagesschule", ["SEW", "NWT", "INSY"], 4.5m, 17, 18, new DateOnly(2026, 6, 9), "/images/tutors/tutor-5.png"),
+        new("Eljon Bacaj", "3AHIT, Tagesschule", ["SEW", "MEDT", "INSY"], 4.8m, 23, 19, new DateOnly(2026, 5, 18), "/images/tutors/tutor-6.png"),
+        new("Bekir Dayi", "3AHIT, Tagesschule", ["Sport"], 5.0m, 11, 16, new DateOnly(2026, 6, 17), "/images/tutors/tutor-7.png"),
     ];
 
     private string SelectedSubject { get; set; } = string.Empty;
@@ -172,7 +172,7 @@
                 || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || tutor.Subjects.Any(subject => subject.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)))
             .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
-            .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= SelectedMinRating.Value)
+            .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= GetMinimumRatingThreshold(SelectedMinRating.Value))
             .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
             .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value)
             .OrderBy(GetTutorImageOrder)
@@ -195,10 +195,26 @@
         SelectedMinRating = SelectedMinRating == rating ? null : rating;
     }
 
-    private static int GetFilledStars(decimal rating)
+    private static decimal GetMinimumRatingThreshold(int rating)
     {
-        var rounded = (int)Math.Round(rating, MidpointRounding.AwayFromZero);
-        return Math.Clamp(rounded, 0, 5);
+        return rating == 5 ? 4.5m : rating;
+    }
+
+    private static string GetStarFillClass(decimal rating, int starIndex)
+    {
+        var starPosition = starIndex + 1;
+
+        if (rating >= starPosition)
+        {
+            return "filled";
+        }
+
+        if (rating >= starPosition - 0.5m)
+        {
+            return "half-filled";
+        }
+
+        return "empty";
     }
 
     private static int GetTutorImageOrder(TutorOffer tutor)
