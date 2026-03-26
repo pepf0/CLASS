@@ -60,6 +60,32 @@
     --page-background: radial-gradient(circle at 20% 20%, #1b2140 0%, #10162b 38%, #0a0f1d 72%, #050810 100%);
 }
 
+/*Custom CSS*/
+
+#loginDiv{
+    padding: 1.3rem;
+    background: linear-gradient(90deg,#005fa3 0%, #6100cf 100%);
+    border-radius: .5rem;
+    border: 5px solid black;
+}
+#loginForm{
+    padding: 1rem;
+    border-radius: 15px;
+    background: linear-gradient(25deg, #005fa3 0%, #6100cf 100%);
+}
+
+.inputBtn-Form{
+    display:block;
+    border-radius: 10px;
+    padding: 10px;
+    background: white;
+    color: black;
+    width: 30rem;
+}
+.label-Form{
+    font-size: 20px;
+}
+
 /* ============================= */
 /* Global Typography */
 /* ============================= */
@@ -770,3 +796,5 @@ h1:focus {
         font-size: 1.1rem;
     }
 }
+
+

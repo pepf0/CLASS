@@ -1,0 +1,30 @@
+﻿@page "/register"
+
+<PageTitle>Registrieren</PageTitle>
+
+
+<!--firstname, lastname, passwort, email, brithday-->
+<form id="loginForm" action="/profil" method="get">
+	<h3>Registrieren</h3>
+
+	<label for="firstname" class="label-Form">Vorname</label>
+	<input name="firstname" type="text" class="inputBtn-Form" required placeholder="Raul-Christian Pirker" maxlength="100" />
+	<br/>
+	<label for="lastname" class="label-Form">Nachname</label>
+	<input type="text" name="lastname" maxlength="100" required value="" class="inputBtn-Form"/>
+	<br/>
+	<label for="email" class="label-Form">Email</label>
+	<input type="email" name="email" maxlength="100" required value="" class="inputBtn-Form" />
+	<br/>
+	<label for="birthday" class="label-Form">Birthday</label>
+	<input type="date" name="birthday" required value="" class="inputBtn-Form"/>
+	<br/>
+	<label for="password" class="label-Form">Password</label>
+	<input type="password" maxlength="255" name="password" value="" required class="inputBtn-Form"/>
+	<br/>
+	<button type="submit" class="btn-secondary-custom">Registrieren</button>
+</form>
+
+@code {
+
+}
