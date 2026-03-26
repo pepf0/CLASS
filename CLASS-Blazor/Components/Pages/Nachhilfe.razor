@@ -79,7 +79,38 @@
 
     <div class="results-summary">
         <span>@FilteredTutors.Count Angebote</span>
-        <span>Sortiert nach Ablaufdatum, Bewertung und Preis</span>
+        <div class="results-sort">
+            <span>Sortieren nach</span>
+            <button type="button"
+                    class="sort-trigger"
+                    @onclick="ToggleSortMenu"
+                    aria-haspopup="menu"
+                    aria-expanded="@IsSortMenuOpen">
+                <span>@GetSelectedSortLabel()</span>
+            </button>
+
+            <button type="button"
+                    class="sort-direction-trigger"
+                    @onclick="ToggleSortDirection"
+                    aria-label="@GetSortDirectionLabel()">
+                @(IsSortDescending ? "\u2193" : "\u2191")
+            </button>
+
+            @if (IsSortMenuOpen)
+            {
+                <div class="sort-menu" role="menu" aria-label="Sortieroptionen">
+                    @foreach (var option in SortByOptions)
+                    {
+                        <button type="button"
+                                class="sort-menu-item @(option.Value == SelectedSortBy ? "active" : string.Empty)"
+                                @onclick="() => SelectSortOption(option.Value)"
+                                role="menuitem">
+                            @option.Label
+                        </button>
+                    }
+                </div>
+            }
+        </div>
     </div>
 
     @if (FilteredTutors.Count == 0)
@@ -141,6 +172,19 @@
 @code {
     private static readonly DateOnly Today = new(2026, 3, 12);
 
+    private const string SortOptionExpiryDate = "expiry";
+    private const string SortOptionRating = "rating";
+    private const string SortOptionPrice = "price";
+    private const string SortDirectionAscending = "asc";
+    private const string SortDirectionDescending = "desc";
+
+    private static readonly (string Value, string Label)[] SortByOptions =
+    [
+        (SortOptionExpiryDate, "Ablaufdatum"),
+        (SortOptionRating, "Bewertung"),
+        (SortOptionPrice, "Preis"),
+    ];
+
     private readonly List<TutorOffer> Tutors =
     [
         new("Dominik Kautz", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 3.9m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
@@ -160,22 +204,32 @@
 
     private DateOnly? AvailableUntil { get; set; }
 
+    private string SelectedSortBy { get; set; } = SortOptionExpiryDate;
+
+    private string SelectedSortDirection { get; set; } = SortDirectionAscending;
+
+    private bool IsSortMenuOpen { get; set; }
+
+    private bool IsSortDescending => SelectedSortDirection == SortDirectionDescending;
+
     private IEnumerable<string> AvailableSubjects =>
         Tutors.SelectMany(t => t.Subjects)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(subject => subject);
 
     private List<TutorOffer> FilteredTutors =>
-        Tutors.Where(tutor => tutor.ExpiresOn >= Today)
-            .Where(tutor => string.IsNullOrWhiteSpace(SearchTerm)
-                || tutor.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
-                || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
-                || tutor.Subjects.Any(subject => subject.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)))
-            .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
-            .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= GetMinimumRatingThreshold(SelectedMinRating.Value))
-            .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
-            .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value)
-            .OrderBy(GetTutorImageOrder)
+        ApplySorting(
+            Tutors.Where(tutor => tutor.ExpiresOn >= Today)
+                .Where(tutor => string.IsNullOrWhiteSpace(SearchTerm)
+                    || tutor.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                    || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                    || tutor.Subjects.Any(subject => subject.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)))
+                .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
+                .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= GetMinimumRatingThreshold(SelectedMinRating.Value))
+                .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
+                .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value),
+            SelectedSortBy,
+            SelectedSortDirection)
             .ToList();
 
     private int? MaxPrice =>
@@ -188,11 +242,32 @@
         MaxPriceInput = string.Empty;
         SelectedMinRating = null;
         AvailableUntil = null;
+        SelectedSortBy = SortOptionExpiryDate;
+        SelectedSortDirection = SortDirectionAscending;
+        IsSortMenuOpen = false;
     }
 
     private void ToggleMinRating(int rating)
     {
         SelectedMinRating = SelectedMinRating == rating ? null : rating;
+    }
+
+    private void ToggleSortMenu()
+    {
+        IsSortMenuOpen = !IsSortMenuOpen;
+    }
+
+    private void SelectSortOption(string sortBy)
+    {
+        SelectedSortBy = sortBy;
+        IsSortMenuOpen = false;
+    }
+
+    private void ToggleSortDirection()
+    {
+        SelectedSortDirection = IsSortDescending
+            ? SortDirectionAscending
+            : SortDirectionDescending;
     }
 
     private static decimal GetMinimumRatingThreshold(int rating)
@@ -215,6 +290,37 @@
         }
 
         return "empty";
+    }
+
+    private string GetSelectedSortLabel()
+    {
+        return SortByOptions.FirstOrDefault(option => option.Value == SelectedSortBy).Label ?? "Ablaufdatum";
+    }
+
+    private string GetSortDirectionLabel()
+    {
+        return IsSortDescending ? "Absteigend sortiert" : "Aufsteigend sortiert";
+    }
+
+    private static IOrderedEnumerable<TutorOffer> ApplySorting(
+        IEnumerable<TutorOffer> tutors,
+        string sortBy,
+        string sortDirection)
+    {
+        var isDescending = sortDirection == SortDirectionDescending;
+
+        return sortBy switch
+        {
+            SortOptionRating => isDescending
+                ? tutors.OrderByDescending(tutor => tutor.Rating).ThenBy(tutor => tutor.Name)
+                : tutors.OrderBy(tutor => tutor.Rating).ThenBy(tutor => tutor.Name),
+            SortOptionPrice => isDescending
+                ? tutors.OrderByDescending(tutor => tutor.PricePerHour).ThenBy(tutor => tutor.Name)
+                : tutors.OrderBy(tutor => tutor.PricePerHour).ThenBy(tutor => tutor.Name),
+            _ => isDescending
+                ? tutors.OrderByDescending(tutor => tutor.ExpiresOn).ThenBy(tutor => tutor.Name)
+                : tutors.OrderBy(tutor => tutor.ExpiresOn).ThenBy(tutor => tutor.Name)
+        };
     }
 
     private static int GetTutorImageOrder(TutorOffer tutor)

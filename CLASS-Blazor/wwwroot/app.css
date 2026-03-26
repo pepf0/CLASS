@@ -498,10 +498,91 @@ h1:focus {
     width: 100%;
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 1rem;
+    padding: 0 0.5rem;
     margin-bottom: 1rem;
     color: var(--color-text-soft);
     font-size: 0.92rem;
+}
+
+.results-sort {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.sort-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sort-trigger:hover,
+.sort-trigger:focus-visible {
+    text-decoration: underline;
+}
+
+.sort-direction-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sort-direction-trigger:hover,
+.sort-direction-trigger:focus-visible {
+    background: var(--surface-hover);
+}
+
+.sort-menu {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    min-width: 12rem;
+    display: flex;
+    flex-direction: column;
+    padding: 0.4rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 14px;
+    background: var(--surface-card);
+    box-shadow: var(--shadow-card);
+    z-index: 10;
+}
+
+.sort-menu-item {
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sort-menu-item:hover,
+.sort-menu-item:focus-visible,
+.sort-menu-item.active {
+    background: var(--surface-hover);
 }
 
 .tutor-grid {
@@ -718,6 +799,7 @@ h1:focus {
         flex-direction: column;
         align-items: flex-start;
     }
+
 }
 
 @media (max-width: 640px) {
@@ -751,6 +833,7 @@ h1:focus {
         align-items: flex-start;
         gap: 0.45rem;
     }
+
 }
 
 @media (max-width: 480px) {
