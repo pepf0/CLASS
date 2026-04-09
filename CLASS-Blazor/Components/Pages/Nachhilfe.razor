@@ -21,7 +21,7 @@
         </div>
 
         <div class="filter-field">
-            <label for="price-filter">Max. Preis pro Stunde</label>
+            <label for="price-filter">Preis</label>
             <input id="price-filter"
                    class="filter-input"
                    type="number"
@@ -32,7 +32,7 @@
         </div>
 
         <div class="filter-field">
-            <label for="date-filter">Gültig bis mindestens</label>
+            <label for="date-filter">Gültig bis</label>
             <input id="date-filter" class="filter-input" type="date" @bind="AvailableUntil" />
         </div>
 
@@ -79,7 +79,38 @@
 
     <div class="results-summary">
         <span>@FilteredTutors.Count Angebote</span>
-        <span>Sortiert nach Ablaufdatum, Bewertung und Preis</span>
+        <div class="results-sort">
+            <span>Sortieren nach</span>
+            <button type="button"
+                    class="sort-trigger"
+                    @onclick="ToggleSortMenu"
+                    aria-haspopup="menu"
+                    aria-expanded="@IsSortMenuOpen">
+                <span>@GetSelectedSortLabel()</span>
+            </button>
+
+            <button type="button"
+                    class="sort-direction-trigger"
+                    @onclick="ToggleSortDirection"
+                    aria-label="@GetSortDirectionLabel()">
+                @(IsSortDescending ? "\u2193" : "\u2191")
+            </button>
+
+            @if (IsSortMenuOpen)
+            {
+                <div class="sort-menu" role="menu" aria-label="Sortieroptionen">
+                    @foreach (var option in SortByOptions)
+                    {
+                        <button type="button"
+                                class="sort-menu-item @(option.Value == SelectedSortBy ? "active" : string.Empty)"
+                                @onclick="() => SelectSortOption(option.Value)"
+                                role="menuitem">
+                            @option.Label
+                        </button>
+                    }
+                </div>
+            }
+        </div>
     </div>
 
     @if (FilteredTutors.Count == 0)
@@ -94,7 +125,12 @@
         <div class="tutor-grid">
             @foreach (var tutor in FilteredTutors)
             {
-                <article class="tutor-card">
+                <article class="tutor-card"
+                         tabindex="0"
+                         role="button"
+                         @onclick="() => OpenTutorDetails(tutor)"
+                         @onkeydown="@(args => HandleTutorCardKeyDown(args, tutor))"
+                         aria-label="@($"Details zu {tutor.Name} anzeigen")">
                     <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
 
                     <div class="tutor-content">
@@ -136,18 +172,155 @@
             }
         </div>
     }
+
+    @if (SelectedTutor is not null)
+    {
+        <div class="tutor-modal-overlay" @onclick="CloseTutorDetails">
+            <section class="tutor-modal"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="tutor-modal-title"
+                     tabindex="-1"
+                     @ref="TutorModalRef"
+                     @onkeydown="HandleTutorModalKeyDown"
+                     @onclick:stopPropagation="true">
+                <button type="button"
+                        class="tutor-modal-close"
+                        @onclick="CloseTutorDetails"
+                        aria-label="Popup schließen">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+
+                <div class="tutor-modal-header">
+                    <img src="@SelectedTutor.ImageUrl" alt="Tutor @SelectedTutor.Name" class="tutor-modal-image" />
+
+                    <div class="tutor-modal-header-content">
+                        <div class="tutor-modal-intro">
+                            <p class="tutor-modal-kicker">Tutorprofil</p>
+                            <h2 id="tutor-modal-title">@SelectedTutor.Name</h2>
+                            <p class="tutor-modal-school">@SelectedTutor.SchoolInfo</p>
+                            <a href="@GetGmailComposeLink(SelectedTutor)"
+                               class="tutor-modal-email"
+                               target="_blank"
+                               rel="noopener noreferrer">
+                                <span class="tutor-modal-email-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" focusable="false">
+                                        <path d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25Zm1.5.47v.12l6.5 4.88 6.5-4.88v-.12a.25.25 0 0 0-.25-.25H5.75a.25.25 0 0 0-.25.25Zm13 1.99-5.6 4.2a1.5 1.5 0 0 1-1.8 0l-5.6-4.2v8.04c0 .14.11.25.25.25h12.5a.25.25 0 0 0 .25-.25Z" />
+                                    </svg>
+                                </span>
+                                <span>@SelectedTutor.Email</span>
+                            </a>
+                        </div>
+
+                        <div class="tutor-modal-highlights">
+                            <article class="tutor-highlight-card tutor-highlight-card-price">
+                                <span class="tutor-highlight-label">Preis</span>
+                                <div class="tutor-highlight-value">@SelectedTutor.PricePerHour <span>EUR / h</span></div>
+                            </article>
+
+                            <article class="tutor-highlight-card tutor-highlight-card-rating">
+                                <div class="tutor-highlight-heading">
+                                    <span class="tutor-highlight-label">Bewertung</span>
+                                    <span class="tutor-highlight-meta">(@SelectedTutor.ReviewCount)</span>
+                                </div>
+                                <div class="tutor-highlight-rating" aria-label="@($"{SelectedTutor.Rating.ToString("0.0").Replace('.', ',')} von 5 Sternen")">
+                                    <span class="tutor-highlight-rating-value">@SelectedTutor.Rating.ToString("0.0").Replace('.', ',')</span>
+                                    <span class="tutor-highlight-stars" aria-hidden="true">
+                                        @for (var i = 0; i < 5; i++)
+                                        {
+                                            var starClass = GetStarFillClass(SelectedTutor.Rating, i);
+                                            var starSymbol = starClass == "empty" ? "\u2606" : "\u2605";
+
+                                            <span class="star @starClass">@starSymbol</span>
+                                        }
+                                    </span>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tutor-modal-subjects">
+                    @foreach (var subject in SelectedTutor.Subjects)
+                    {
+                        <span class="subject-chip tutor-modal-subject-chip">@subject</span>
+                    }
+                </div>
+
+                <div class="tutor-modal-body">
+                    <section class="tutor-modal-section">
+                        <div class="tutor-section-heading">
+                            <h3>Über das Angebot</h3>
+                            @if (HasExpandableDescription(SelectedTutor))
+                            {
+                                <button type="button"
+                                        class="tutor-inline-toggle"
+                                        @onclick="ToggleDescription">
+                                    @(IsDescriptionExpanded ? "Weniger anzeigen" : "Mehr anzeigen")
+                                </button>
+                            }
+                        </div>
+
+                        <p class="tutor-modal-description @(IsDescriptionExpanded ? "expanded" : "collapsed")">
+                            @GetDisplayedDescription(SelectedTutor)
+                        </p>
+                    </section>
+
+                    <section class="tutor-modal-section tutor-modal-secondary">
+                        <div class="tutor-secondary-grid">
+                            <article class="tutor-secondary-item">
+                                <span class="tutor-secondary-label">Alter</span>
+                                <span class="tutor-secondary-value">@SelectedTutor.Age Jahre</span>
+                            </article>
+
+                            <article class="tutor-secondary-item">
+                                <span class="tutor-secondary-label">Gültig bis</span>
+                                <span class="tutor-secondary-value">@SelectedTutor.ExpiresOn.ToString("dd.MM.yyyy")</span>
+                            </article>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="tutor-modal-actions">
+                    <div class="tutor-modal-cta">
+                        <button type="button" class="tutor-request-button" @onclick="SendTutorRequest">
+                            Anfrage senden
+                        </button>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(RequestMessage))
+                    {
+                        <p class="tutor-request-hint">@RequestMessage</p>
+                    }
+                </div>
+            </section>
+        </div>
+    }
 </section>
 
 @code {
     private static readonly DateOnly Today = new(2026, 3, 12);
 
+    private const string SortOptionExpiryDate = "expiry";
+    private const string SortOptionRating = "rating";
+    private const string SortOptionPrice = "price";
+    private const string SortDirectionAscending = "asc";
+    private const string SortDirectionDescending = "desc";
+
+    private static readonly (string Value, string Label)[] SortByOptions =
+    [
+        (SortOptionExpiryDate, "Ablaufdatum"),
+        (SortOptionRating, "Bewertung"),
+        (SortOptionPrice, "Preis"),
+    ];
+
     private readonly List<TutorOffer> Tutors =
     [
-        new("Dominik Kautz", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 3.9m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
-        new("Noel Hollnthoner", "3AHIT, Tagesschule", ["SEW", "Ethik", "Sport"], 4.2m, 10, 15, new DateOnly(2026, 5, 24), "/images/tutors/tutor-4.png"),
-        new("Alisandro Gourie", "3AHIT, Tagesschule", ["SEW", "NWT", "INSY"], 4.5m, 17, 18, new DateOnly(2026, 6, 9), "/images/tutors/tutor-5.png"),
-        new("Eljon Bacaj", "3AHIT, Tagesschule", ["SEW", "MEDT", "INSY"], 4.8m, 23, 19, new DateOnly(2026, 5, 18), "/images/tutors/tutor-6.png"),
-        new("Bekir Dayi", "3AHIT, Tagesschule", ["Sport"], 5.0m, 11, 16, new DateOnly(2026, 6, 17), "/images/tutors/tutor-7.png"),
+        new("Dominik Kautz", 17, "kautz.d23@htlwienwest.at", "Ich bin Dominik und unterstütze dich kurz und verständlich bei MEDT, INSY und Deutsch.", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 3.9m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
+        new("Noel Hollnthoner", 16, "hollnthoner.n23@htlwienwest.at", "Mein Name ist Noel und ich helfe dir gerne bei SEW, Ethik und Sport.", "3AHIT, Tagesschule", ["SEW", "Ethik", "Sport"], 4.2m, 10, 15, new DateOnly(2026, 5, 24), "/images/tutors/tutor-4.png"),
+        new("Alisandro Gourie", 18, "gourie.a23@htlwienwest.at", "Ich bin Alisandro und erkläre dir SEW, NWT und INSY Schritt für Schritt.", "3AHIT, Tagesschule", ["SEW", "NWT", "INSY"], 4.5m, 17, 18, new DateOnly(2026, 6, 9), "/images/tutors/tutor-5.png"),
+        new("Eljon Bacaj", 19, "bacaj.e23@htlwienwest.at", "Ich bin Eljon und unterstütze dich mit ruhigen Erklärungen in SEW, MEDT und INSY.", "3AHIT, Tagesschule", ["SEW", "MEDT", "INSY"], 4.8m, 23, 19, new DateOnly(2026, 5, 18), "/images/tutors/tutor-6.png"),
+        new("Bekir Dayi", 16, "dayi.b23@htlwienwest.at", "Mein Name ist Bekir und ich motiviere dich gerne im Fach Sport.", "3AHIT, Tagesschule", ["Sport"], 5.0m, 11, 16, new DateOnly(2026, 6, 17), "/images/tutors/tutor-7.png"),
     ];
 
     private string SelectedSubject { get; set; } = string.Empty;
@@ -160,22 +333,42 @@
 
     private DateOnly? AvailableUntil { get; set; }
 
+    private string SelectedSortBy { get; set; } = SortOptionExpiryDate;
+
+    private string SelectedSortDirection { get; set; } = SortDirectionAscending;
+
+    private bool IsSortMenuOpen { get; set; }
+
+    private TutorOffer? SelectedTutor { get; set; }
+
+    private string RequestMessage { get; set; } = string.Empty;
+
+    private ElementReference TutorModalRef;
+
+    private bool ShouldFocusTutorModal { get; set; }
+
+    private bool IsDescriptionExpanded { get; set; }
+
+    private bool IsSortDescending => SelectedSortDirection == SortDirectionDescending;
+
     private IEnumerable<string> AvailableSubjects =>
         Tutors.SelectMany(t => t.Subjects)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(subject => subject);
 
     private List<TutorOffer> FilteredTutors =>
-        Tutors.Where(tutor => tutor.ExpiresOn >= Today)
-            .Where(tutor => string.IsNullOrWhiteSpace(SearchTerm)
-                || tutor.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
-                || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
-                || tutor.Subjects.Any(subject => subject.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)))
-            .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
-            .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= GetMinimumRatingThreshold(SelectedMinRating.Value))
-            .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
-            .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value)
-            .OrderBy(GetTutorImageOrder)
+        ApplySorting(
+            Tutors.Where(tutor => tutor.ExpiresOn >= Today)
+                .Where(tutor => string.IsNullOrWhiteSpace(SearchTerm)
+                    || tutor.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                    || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                    || tutor.Subjects.Any(subject => subject.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)))
+                .Where(tutor => string.IsNullOrWhiteSpace(SelectedSubject) || tutor.Subjects.Contains(SelectedSubject, StringComparer.OrdinalIgnoreCase))
+                .Where(tutor => !SelectedMinRating.HasValue || tutor.Rating >= GetMinimumRatingThreshold(SelectedMinRating.Value))
+                .Where(tutor => !MaxPrice.HasValue || tutor.PricePerHour <= MaxPrice.Value)
+                .Where(tutor => !AvailableUntil.HasValue || tutor.ExpiresOn >= AvailableUntil.Value),
+            SelectedSortBy,
+            SelectedSortDirection)
             .ToList();
 
     private int? MaxPrice =>
@@ -188,11 +381,111 @@
         MaxPriceInput = string.Empty;
         SelectedMinRating = null;
         AvailableUntil = null;
+        SelectedSortBy = SortOptionExpiryDate;
+        SelectedSortDirection = SortDirectionAscending;
+        IsSortMenuOpen = false;
+    }
+
+    private void OpenTutorDetails(TutorOffer tutor)
+    {
+        SelectedTutor = tutor;
+        RequestMessage = string.Empty;
+        ShouldFocusTutorModal = true;
+        IsDescriptionExpanded = false;
+    }
+
+    private void CloseTutorDetails()
+    {
+        SelectedTutor = null;
+        RequestMessage = string.Empty;
+        ShouldFocusTutorModal = false;
+        IsDescriptionExpanded = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (ShouldFocusTutorModal && SelectedTutor is not null)
+        {
+            ShouldFocusTutorModal = false;
+            await TutorModalRef.FocusAsync();
+        }
+    }
+
+    private void HandleTutorCardKeyDown(KeyboardEventArgs args, TutorOffer tutor)
+    {
+        if (args.Key is "Enter" or " ")
+        {
+            OpenTutorDetails(tutor);
+        }
+    }
+
+    private void HandleTutorModalKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            CloseTutorDetails();
+        }
+    }
+
+    private void SendTutorRequest()
+    {
+        if (SelectedTutor is null)
+        {
+            return;
+        }
+
+        RequestMessage = $"Die Anfrage an {SelectedTutor.Name} ist noch nicht aktiviert.";
+    }
+
+    private void ToggleDescription()
+    {
+        IsDescriptionExpanded = !IsDescriptionExpanded;
+    }
+
+    private static bool HasExpandableDescription(TutorOffer tutor)
+    {
+        return tutor.Description.Length > 72;
+    }
+
+    private string GetDisplayedDescription(TutorOffer tutor)
+    {
+        if (IsDescriptionExpanded || !HasExpandableDescription(tutor))
+        {
+            return tutor.Description;
+        }
+
+        return tutor.Description[..72].TrimEnd().TrimEnd('.', ',', ';') + "...";
+    }
+
+    private static string GetGmailComposeLink(TutorOffer tutor)
+    {
+        var subject = Uri.EscapeDataString($"Nachhilfe-Anfrage an {tutor.Name}");
+        var recipient = Uri.EscapeDataString(tutor.Email);
+
+        return $"https://mail.google.com/mail/?view=cm&fs=1&to={recipient}&su={subject}";
     }
 
     private void ToggleMinRating(int rating)
     {
         SelectedMinRating = SelectedMinRating == rating ? null : rating;
+    }
+
+    private void ToggleSortMenu()
+    {
+        IsSortMenuOpen = !IsSortMenuOpen;
+    }
+
+    private void SelectSortOption(string sortBy)
+    {
+        SelectedSortBy = sortBy;
+        IsSortMenuOpen = false;
+    }
+
+    private void ToggleSortDirection()
+    {
+        SelectedSortDirection = IsSortDescending
+            ? SortDirectionAscending
+            : SortDirectionDescending;
     }
 
     private static decimal GetMinimumRatingThreshold(int rating)
@@ -217,6 +510,37 @@
         return "empty";
     }
 
+    private string GetSelectedSortLabel()
+    {
+        return SortByOptions.FirstOrDefault(option => option.Value == SelectedSortBy).Label ?? "Ablaufdatum";
+    }
+
+    private string GetSortDirectionLabel()
+    {
+        return IsSortDescending ? "Absteigend sortiert" : "Aufsteigend sortiert";
+    }
+
+    private static IOrderedEnumerable<TutorOffer> ApplySorting(
+        IEnumerable<TutorOffer> tutors,
+        string sortBy,
+        string sortDirection)
+    {
+        var isDescending = sortDirection == SortDirectionDescending;
+
+        return sortBy switch
+        {
+            SortOptionRating => isDescending
+                ? tutors.OrderByDescending(tutor => tutor.Rating).ThenBy(tutor => tutor.Name)
+                : tutors.OrderBy(tutor => tutor.Rating).ThenBy(tutor => tutor.Name),
+            SortOptionPrice => isDescending
+                ? tutors.OrderByDescending(tutor => tutor.PricePerHour).ThenBy(tutor => tutor.Name)
+                : tutors.OrderBy(tutor => tutor.PricePerHour).ThenBy(tutor => tutor.Name),
+            _ => isDescending
+                ? tutors.OrderByDescending(tutor => tutor.ExpiresOn).ThenBy(tutor => tutor.Name)
+                : tutors.OrderBy(tutor => tutor.ExpiresOn).ThenBy(tutor => tutor.Name)
+        };
+    }
+
     private static int GetTutorImageOrder(TutorOffer tutor)
     {
         const string marker = "tutor-";
@@ -239,6 +563,9 @@
 
     private sealed record TutorOffer(
         string Name,
+        int Age,
+        string Email,
+        string Description,
         string SchoolInfo,
         string[] Subjects,
         decimal Rating,
