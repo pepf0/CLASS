@@ -1,4 +1,7 @@
 @page "/nachhilfe"
+@inject TutorOfferStore TutorOfferStore
+@inject TutorDirectoryService TutorDirectoryService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Nachhilfe</PageTitle>
 
@@ -113,11 +116,18 @@
         </div>
     </div>
 
-    @if (FilteredTutors.Count == 0)
+    @if (IsLoading)
+    {
+        <div class="empty-state">
+            <h3>Tutoren werden geladen</h3>
+            <p>Die vorhandenen Daten werden gerade aus der Datenbank übernommen.</p>
+        </div>
+    }
+    else if (FilteredTutors.Count == 0)
     {
         <div class="empty-state">
             <h3>Keine passenden Angebote gefunden</h3>
-            <p>Passe die Filter an oder setze sie zurück.</p>
+            <p>@(string.IsNullOrWhiteSpace(DirectoryMessage) ? "Passe die Filter an oder setze sie zurück." : DirectoryMessage)</p>
         </div>
     }
     else
@@ -131,7 +141,33 @@
                          @onclick="() => OpenTutorDetails(tutor)"
                          @onkeydown="@(args => HandleTutorCardKeyDown(args, tutor))"
                          aria-label="@($"Details zu {tutor.Name} anzeigen")">
-                    <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
+                    @if (IsOwnTutorOffer(tutor))
+                    {
+                        <button type="button"
+                                class="tutor-edit-button tutor-edit-button-card"
+                                @onclick="() => BeginEditingOffer(tutor)"
+                                @onclick:stopPropagation="true"
+                                aria-label="Eigenes Angebot bearbeiten"
+                                title="Angebot bearbeiten">
+                            <span aria-hidden="true">@("\u270E")</span>
+                        </button>
+                    }
+
+                    @if (HasTutorImage(tutor))
+                    {
+                        <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
+                    }
+                    else
+                    {
+                        <div class="tutor-image tutor-image-placeholder" role="img" aria-label="Kein Bild für @tutor.Name vorhanden">
+                            <span class="tutor-image-placeholder-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false">
+                                    <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-6 2.24-6 5v1h12v-1c0-2.76-2.69-5-6-5Z" />
+                                </svg>
+                            </span>
+                            <span class="tutor-image-placeholder-text">Kein Bild vorhanden</span>
+                        </div>
+                    }
 
                     <div class="tutor-content">
                         <div class="tutor-topline">
@@ -146,9 +182,16 @@
                         </div>
 
                         <div class="tutor-subjects">
-                            @foreach (var subject in tutor.Subjects)
+                            @if (tutor.Subjects.Length == 0)
                             {
-                                <span class="subject-chip">@subject</span>
+                                <span class="subject-chip">Fächer folgen</span>
+                            }
+                            else
+                            {
+                                @foreach (var subject in tutor.Subjects)
+                                {
+                                    <span class="subject-chip">@subject</span>
+                                }
                             }
                         </div>
 
@@ -165,7 +208,7 @@
                                 </span>
                                 <span class="rating-text">@tutor.Rating.ToString("0.0") (@tutor.ReviewCount)</span>
                             </div>
-                            <span class="price">@tutor.PricePerHour EUR / h</span>
+                            <span class="price">@GetPriceText(tutor)</span>
                         </div>
                     </div>
                 </article>
@@ -184,6 +227,17 @@
                      @ref="TutorModalRef"
                      @onkeydown="HandleTutorModalKeyDown"
                      @onclick:stopPropagation="true">
+                @if (IsOwnTutorOffer(SelectedTutor))
+                {
+                    <button type="button"
+                            class="tutor-edit-button tutor-edit-button-modal"
+                            @onclick="() => BeginEditingOffer(SelectedTutor)"
+                            aria-label="Eigenes Angebot bearbeiten"
+                            title="Angebot bearbeiten">
+                        <span aria-hidden="true">@("\u270E")</span>
+                    </button>
+                }
+
                 <button type="button"
                         class="tutor-modal-close"
                         @onclick="CloseTutorDetails"
@@ -192,7 +246,21 @@
                 </button>
 
                 <div class="tutor-modal-header">
-                    <img src="@SelectedTutor.ImageUrl" alt="Tutor @SelectedTutor.Name" class="tutor-modal-image" />
+                    @if (HasTutorImage(SelectedTutor))
+                    {
+                        <img src="@SelectedTutor.ImageUrl" alt="Tutor @SelectedTutor.Name" class="tutor-modal-image" />
+                    }
+                    else
+                    {
+                        <div class="tutor-modal-image tutor-image-placeholder tutor-modal-image-placeholder" role="img" aria-label="Kein Bild für @SelectedTutor.Name vorhanden">
+                            <span class="tutor-image-placeholder-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false">
+                                    <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-6 2.24-6 5v1h12v-1c0-2.76-2.69-5-6-5Z" />
+                                </svg>
+                            </span>
+                            <span class="tutor-image-placeholder-text">Kein Bild vorhanden</span>
+                        </div>
+                    }
 
                     <div class="tutor-modal-header-content">
                         <div class="tutor-modal-intro">
@@ -215,7 +283,7 @@
                         <div class="tutor-modal-highlights">
                             <article class="tutor-highlight-card tutor-highlight-card-price">
                                 <span class="tutor-highlight-label">Preis</span>
-                                <div class="tutor-highlight-value">@SelectedTutor.PricePerHour <span>EUR / h</span></div>
+                                <div class="tutor-highlight-value">@GetPriceText(SelectedTutor)</div>
                             </article>
 
                             <article class="tutor-highlight-card tutor-highlight-card-rating">
@@ -241,9 +309,16 @@
                 </div>
 
                 <div class="tutor-modal-subjects">
-                    @foreach (var subject in SelectedTutor.Subjects)
+                    @if (SelectedTutor.Subjects.Length == 0)
                     {
-                        <span class="subject-chip tutor-modal-subject-chip">@subject</span>
+                        <span class="subject-chip tutor-modal-subject-chip">Fächer folgen</span>
+                    }
+                    else
+                    {
+                        @foreach (var subject in SelectedTutor.Subjects)
+                        {
+                            <span class="subject-chip tutor-modal-subject-chip">@subject</span>
+                        }
                     }
                 </div>
 
@@ -270,7 +345,7 @@
                         <div class="tutor-secondary-grid">
                             <article class="tutor-secondary-item">
                                 <span class="tutor-secondary-label">Alter</span>
-                                <span class="tutor-secondary-value">@SelectedTutor.Age Jahre</span>
+                                <span class="tutor-secondary-value">@GetAgeText(SelectedTutor)</span>
                             </article>
 
                             <article class="tutor-secondary-item">
@@ -296,11 +371,125 @@
             </section>
         </div>
     }
+
+    @if (IsEditModalOpen)
+    {
+        <div class="tutor-modal-overlay" @onclick="CloseEditModal">
+            <section class="tutor-modal tutor-edit-modal"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="tutor-edit-modal-title"
+                     @onclick:stopPropagation="true">
+                <button type="submit"
+                        form="own-offer-edit-form"
+                        class="tutor-edit-button tutor-edit-button-modal tutor-edit-button-confirm"
+                        aria-label="Änderungen speichern"
+                        title="Änderungen speichern">
+                    <span aria-hidden="true">@("\u2713")</span>
+                </button>
+
+                <button type="button"
+                        class="tutor-modal-close"
+                        @onclick="CloseEditModal"
+                        aria-label="Bearbeiten schließen">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+
+                <div class="tutor-modal-header">
+                    @if (EditingTutor is not null && HasTutorImage(EditingTutor))
+                    {
+                        <img src="@EditingTutor.ImageUrl" alt="Tutor @EditingTutor.Name" class="tutor-modal-image" />
+                    }
+                    else
+                    {
+                        <div class="tutor-modal-image tutor-image-placeholder tutor-modal-image-placeholder" role="img" aria-label="Kein Bild für @TutorOfferStore.CurrentTutor.Name vorhanden">
+                            <span class="tutor-image-placeholder-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false">
+                                    <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-6 2.24-6 5v1h12v-1c0-2.76-2.69-5-6-5Z" />
+                                </svg>
+                            </span>
+                            <span class="tutor-image-placeholder-text">Kein Bild vorhanden</span>
+                        </div>
+                    }
+
+                    <div class="tutor-modal-header-content">
+                        <div class="tutor-modal-intro">
+                            <p class="tutor-modal-kicker">Eigenes Angebot</p>
+                            <h2 id="tutor-edit-modal-title">Detailansicht bearbeiten</h2>
+                            <p class="tutor-modal-school">@TutorOfferStore.CurrentTutor.Name, @TutorOfferStore.CurrentTutor.SchoolInfo</p>
+                            <p class="tutor-edit-subtitle">Passe Beschreibung, Fächer, Preis und Ablauf direkt in diesem Dialog an.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <EditForm id="own-offer-edit-form" Model="EditFormModel" OnValidSubmit="HandleEditSubmit" class="offer-form tutor-edit-form">
+                    <DataAnnotationsValidator />
+
+                    <div class="tutor-modal-body">
+                        <section class="tutor-modal-section">
+                            <div class="tutor-section-heading">
+                                <h3>Beschreibung</h3>
+                            </div>
+
+                            <div class="offer-form-field">
+                                <InputTextArea class="offer-form-input offer-form-textarea"
+                                               @bind-Value="EditFormModel.Description" />
+                                <ValidationMessage For="@(() => EditFormModel.Description)" />
+                            </div>
+                        </section>
+
+                        <section class="tutor-modal-section">
+                            <div class="tutor-section-heading">
+                                <h3>Fächer</h3>
+                            </div>
+
+                            <div class="offer-form-field">
+                                <div class="subject-selection-grid">
+                                    @foreach (var subject in EditableSubjects)
+                                    {
+                                        var isChecked = EditFormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase);
+
+                                        <label class="subject-selection-chip">
+                                            <input type="checkbox"
+                                                   checked="@isChecked"
+                                                   @onchange="args => ToggleEditSubject(subject, args.Value is bool value && value)" />
+                                            <span>@subject</span>
+                                        </label>
+                                    }
+                                </div>
+                                <ValidationMessage For="@(() => EditFormModel.Subjects)" />
+                            </div>
+                        </section>
+
+                        <section class="tutor-modal-section tutor-edit-metrics-section">
+                            <div class="offer-form-layout">
+                                <div class="offer-form-field">
+                                    <label for="edit-price">Preis pro Stunde</label>
+                                    <InputNumber id="edit-price"
+                                                 class="offer-form-input"
+                                                 @bind-Value="EditFormModel.PricePerHour" />
+                                    <ValidationMessage For="@(() => EditFormModel.PricePerHour)" />
+                                </div>
+
+                                <div class="offer-form-field">
+                                    <label for="edit-expiresOn">Gültig bis</label>
+                                    <InputDate id="edit-expiresOn"
+                                               class="offer-form-input"
+                                               @bind-Value="EditFormModel.ExpiresOn" />
+                                    <ValidationMessage For="@(() => EditFormModel.ExpiresOn)" />
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <ValidationSummary class="tutor-edit-validation" />
+                </EditForm>
+            </section>
+        </div>
+    }
 </section>
 
 @code {
-    private static readonly DateOnly Today = new(2026, 3, 12);
-
     private const string SortOptionExpiryDate = "expiry";
     private const string SortOptionRating = "rating";
     private const string SortOptionPrice = "price";
@@ -312,15 +501,6 @@
         (SortOptionExpiryDate, "Ablaufdatum"),
         (SortOptionRating, "Bewertung"),
         (SortOptionPrice, "Preis"),
-    ];
-
-    private readonly List<TutorOffer> Tutors =
-    [
-        new("Dominik Kautz", 17, "kautz.d23@htlwienwest.at", "Ich bin Dominik und unterstütze dich kurz und verständlich bei MEDT, INSY und Deutsch.", "3AHIT, Tagesschule", ["MEDT", "INSY", "Deutsch"], 3.9m, 14, 17, new DateOnly(2026, 5, 29), "/images/tutors/tutor-2.png"),
-        new("Noel Hollnthoner", 16, "hollnthoner.n23@htlwienwest.at", "Mein Name ist Noel und ich helfe dir gerne bei SEW, Ethik und Sport.", "3AHIT, Tagesschule", ["SEW", "Ethik", "Sport"], 4.2m, 10, 15, new DateOnly(2026, 5, 24), "/images/tutors/tutor-4.png"),
-        new("Alisandro Gourie", 18, "gourie.a23@htlwienwest.at", "Ich bin Alisandro und erkläre dir SEW, NWT und INSY Schritt für Schritt.", "3AHIT, Tagesschule", ["SEW", "NWT", "INSY"], 4.5m, 17, 18, new DateOnly(2026, 6, 9), "/images/tutors/tutor-5.png"),
-        new("Eljon Bacaj", 19, "bacaj.e23@htlwienwest.at", "Ich bin Eljon und unterstütze dich mit ruhigen Erklärungen in SEW, MEDT und INSY.", "3AHIT, Tagesschule", ["SEW", "MEDT", "INSY"], 4.8m, 23, 19, new DateOnly(2026, 5, 18), "/images/tutors/tutor-6.png"),
-        new("Bekir Dayi", 16, "dayi.b23@htlwienwest.at", "Mein Name ist Bekir und ich motiviere dich gerne im Fach Sport.", "3AHIT, Tagesschule", ["Sport"], 5.0m, 11, 16, new DateOnly(2026, 6, 17), "/images/tutors/tutor-7.png"),
     ];
 
     private string SelectedSubject { get; set; } = string.Empty;
@@ -349,16 +529,39 @@
 
     private bool IsDescriptionExpanded { get; set; }
 
+    private bool IsLoading { get; set; } = true;
+
+    private string DirectoryMessage { get; set; } = string.Empty;
+
+    private bool LoadedFromApi { get; set; }
+
+    private bool IsEditModalOpen { get; set; }
+
+    private IReadOnlyList<TutorOffer> AllTutors { get; set; } = [];
+
+    private TutorOffer? EditingTutor { get; set; }
+
+    private TutorOfferFormModel EditFormModel { get; set; } = new();
+
     private bool IsSortDescending => SelectedSortDirection == SortDirectionDescending;
 
+    private DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
     private IEnumerable<string> AvailableSubjects =>
-        Tutors.SelectMany(t => t.Subjects)
+        AllTutors.SelectMany(t => t.Subjects)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(subject => subject);
+
+    private IEnumerable<string> EditableSubjects =>
+        AllTutors.SelectMany(t => t.Subjects)
+            .Concat(TutorOfferStore.GetCurrentTutorOffer().Subjects)
+            .Concat(["Deutsch", "Ethik", "INSY", "MEDT", "NWT", "SEW", "Sport"])
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(subject => subject);
 
     private List<TutorOffer> FilteredTutors =>
         ApplySorting(
-            Tutors.Where(tutor => tutor.ExpiresOn >= Today)
+            AllTutors.Where(tutor => tutor.ExpiresOn >= Today)
                 .Where(tutor => string.IsNullOrWhiteSpace(SearchTerm)
                     || tutor.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                     || tutor.SchoolInfo.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
@@ -373,6 +576,21 @@
 
     private int? MaxPrice =>
         int.TryParse(MaxPriceInput, out var value) ? value : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var directoryResult = await TutorDirectoryService.GetTutorsAsync();
+        AllTutors = directoryResult.Tutors;
+        DirectoryMessage = directoryResult.Message ?? string.Empty;
+        LoadedFromApi = directoryResult.LoadedFromApi;
+
+        if (LoadedFromApi)
+        {
+            SyncCurrentTutorOfferIntoDirectory();
+        }
+
+        IsLoading = false;
+    }
 
     private void ResetFilters()
     {
@@ -402,6 +620,49 @@
         IsDescriptionExpanded = false;
     }
 
+    private void BeginEditingOffer(TutorOffer tutor)
+    {
+        EditingTutor = tutor;
+        EditFormModel = new TutorOfferFormModel
+        {
+            Description = tutor.Description,
+            PricePerHour = tutor.PricePerHour,
+            Subjects = [.. tutor.Subjects],
+            ExpiresOn = tutor.ExpiresOn
+        };
+
+        CloseTutorDetails();
+        IsEditModalOpen = true;
+    }
+
+    private void CloseEditModal()
+    {
+        IsEditModalOpen = false;
+        EditingTutor = null;
+    }
+
+    private void ToggleEditSubject(string subject, bool isSelected)
+    {
+        if (isSelected)
+        {
+            if (!EditFormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase))
+            {
+                EditFormModel.Subjects.Add(subject);
+            }
+
+            return;
+        }
+
+        EditFormModel.Subjects.RemoveAll(selectedSubject => string.Equals(selectedSubject, subject, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void HandleEditSubmit()
+    {
+        TutorOfferStore.SaveCurrentTutorOffer(EditFormModel);
+        SyncCurrentTutorOfferIntoDirectory();
+        CloseEditModal();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (ShouldFocusTutorModal && SelectedTutor is not null)
@@ -423,7 +684,14 @@
     {
         if (args.Key == "Escape")
         {
-            CloseTutorDetails();
+            if (IsEditModalOpen)
+            {
+                CloseEditModal();
+            }
+            else
+            {
+                CloseTutorDetails();
+            }
         }
     }
 
@@ -437,9 +705,30 @@
         RequestMessage = $"Die Anfrage an {SelectedTutor.Name} ist noch nicht aktiviert.";
     }
 
+    private bool IsOwnTutorOffer(TutorOffer? tutor)
+    {
+        return tutor is not null
+            && (string.Equals(tutor.Email, TutorOfferStore.CurrentTutor.Email, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tutor.Name, TutorOfferStore.CurrentTutor.Name, StringComparison.OrdinalIgnoreCase));
+    }
+
     private void ToggleDescription()
     {
         IsDescriptionExpanded = !IsDescriptionExpanded;
+    }
+
+    private void SyncCurrentTutorOfferIntoDirectory()
+    {
+        var currentTutorOffer = TutorOfferStore.GetCurrentTutorOffer();
+        var tutors = AllTutors.ToList();
+        var index = tutors.FindIndex(IsOwnTutorOffer);
+
+        if (index >= 0)
+        {
+            tutors[index] = currentTutorOffer;
+        }
+
+        AllTutors = tutors;
     }
 
     private static bool HasExpandableDescription(TutorOffer tutor)
@@ -463,6 +752,25 @@
         var recipient = Uri.EscapeDataString(tutor.Email);
 
         return $"https://mail.google.com/mail/?view=cm&fs=1&to={recipient}&su={subject}";
+    }
+
+    private static bool HasTutorImage(TutorOffer tutor)
+    {
+        return !string.IsNullOrWhiteSpace(tutor.ImageUrl);
+    }
+
+    private static string GetPriceText(TutorOffer tutor)
+    {
+        return tutor.PricePerHour > 0
+            ? $"{tutor.PricePerHour} EUR / h"
+            : "Preis auf Anfrage";
+    }
+
+    private static string GetAgeText(TutorOffer tutor)
+    {
+        return tutor.Age > 0
+            ? $"{tutor.Age} Jahre"
+            : "Nicht angegeben";
     }
 
     private void ToggleMinRating(int rating)
@@ -540,38 +848,4 @@
                 : tutors.OrderBy(tutor => tutor.ExpiresOn).ThenBy(tutor => tutor.Name)
         };
     }
-
-    private static int GetTutorImageOrder(TutorOffer tutor)
-    {
-        const string marker = "tutor-";
-        var imagePath = tutor.ImageUrl;
-        var start = imagePath.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
-
-        if (start < 0)
-        {
-            return int.MaxValue;
-        }
-
-        start += marker.Length;
-        var end = imagePath.IndexOf('.', start);
-        var numberText = end >= 0
-            ? imagePath[start..end]
-            : imagePath[start..];
-
-        return int.TryParse(numberText, out var number) ? number : int.MaxValue;
-    }
-
-    private sealed record TutorOffer(
-        string Name,
-        int Age,
-        string Email,
-        string Description,
-        string SchoolInfo,
-        string[] Subjects,
-        decimal Rating,
-        int ReviewCount,
-        int PricePerHour,
-        DateOnly ExpiresOn,
-        string ImageUrl
-    );
 }

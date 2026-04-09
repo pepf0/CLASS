@@ -1,11 +1,151 @@
 @page "/profil"
+@inject TutorOfferStore TutorOfferStore
 
 <PageTitle>Profil</PageTitle>
 
-<h1>Profil</h1>
-<p>Hier wird dein Profil angezeigt.</p>
+<section class="profile-page page-with-footer-space">
+    <div class="profile-header">
+        <div>
+            <p class="profile-kicker">Testkonto aktiv</p>
+            <h1>Profil</h1>
+            <p class="profile-subtitle">Fürs Testen ist standardmäßig Dominik Kautz eingeloggt. Seine Kontodaten werden direkt für neue Tutor-Angebote verwendet.</p>
+        </div>
+    </div>
 
-<div id="loginDiv">
-	<p>Melde dich an, um auf diese Seite zuzugreifen</p>
-	<a href="/register" class="btn-secondary-custom">Anmelden/Registrieren</a>
-</div>
+    <div class="profile-grid">
+        <aside class="profile-card">
+            <img src="@CurrentTutor.ImageUrl" alt="@CurrentTutor.Name" class="profile-avatar" />
+            <div class="profile-card-content">
+                <h2>@CurrentTutor.Name</h2>
+                <p>@CurrentTutor.SchoolInfo</p>
+                <a href="mailto:@CurrentTutor.Email">@CurrentTutor.Email</a>
+                <div class="profile-meta">
+                    <span>@CurrentTutor.Age Jahre</span>
+                    <span>Bereits als Tutor hinterlegt</span>
+                </div>
+            </div>
+        </aside>
+
+        <section class="offer-form-card" aria-labelledby="offer-form-heading">
+            <div class="offer-form-header">
+                <div>
+                    <p class="profile-kicker">Tutor-Angebot</p>
+                    <h2 id="offer-form-heading">Angebot erstellen oder aktualisieren</h2>
+                </div>
+                <a href="/nachhilfe" class="btn-secondary-custom">Angebote ansehen</a>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(SaveMessage))
+            {
+                <p class="offer-form-success">@SaveMessage</p>
+            }
+
+            <EditForm Model="FormModel" OnValidSubmit="HandleValidSubmit" class="offer-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="offer-form-layout">
+                    <div class="offer-form-field offer-form-field-full">
+                        <label for="description">Beschreibung</label>
+                        <InputTextArea id="description"
+                                       class="offer-form-input offer-form-textarea"
+                                       @bind-Value="FormModel.Description" />
+                        <ValidationMessage For="@(() => FormModel.Description)" />
+                    </div>
+
+                    <div class="offer-form-field offer-form-field-full">
+                        <label>Fächer</label>
+                        <div class="subject-selection-grid">
+                            @foreach (var subject in AvailableSubjects)
+                            {
+                                var isChecked = FormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase);
+
+                                <label class="subject-selection-chip">
+                                    <input type="checkbox"
+                                           checked="@isChecked"
+                                           @onchange="args => ToggleSubject(subject, args.Value is bool value && value)" />
+                                    <span>@subject</span>
+                                </label>
+                            }
+                        </div>
+                        <ValidationMessage For="@(() => FormModel.Subjects)" />
+                    </div>
+
+                    <div class="offer-form-field">
+                        <label for="price">Preis pro Stunde</label>
+                        <InputNumber id="price"
+                                     class="offer-form-input"
+                                     @bind-Value="FormModel.PricePerHour" />
+                        <ValidationMessage For="@(() => FormModel.PricePerHour)" />
+                    </div>
+
+                    <div class="offer-form-field">
+                        <label for="expiresOn">Gültig bis</label>
+                        <InputDate id="expiresOn"
+                                   class="offer-form-input"
+                                   @bind-Value="FormModel.ExpiresOn" />
+                        <ValidationMessage For="@(() => FormModel.ExpiresOn)" />
+                    </div>
+                </div>
+
+                <div class="offer-form-actions">
+                    <button type="submit" class="btn-primary-custom">Angebot speichern</button>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+</section>
+
+@code {
+    private static readonly string[] AvailableSubjects =
+    [
+        "Deutsch",
+        "Ethik",
+        "INSY",
+        "MEDT",
+        "NWT",
+        "SEW",
+        "Sport"
+    ];
+
+    private TutorOfferFormModel FormModel { get; set; } = new();
+
+    private string SaveMessage { get; set; } = string.Empty;
+
+    private TutorAccount CurrentTutor => TutorOfferStore.CurrentTutor;
+
+    protected override void OnInitialized()
+    {
+        var currentOffer = TutorOfferStore.GetCurrentTutorOffer();
+        FormModel = new TutorOfferFormModel
+        {
+            Description = currentOffer.Description,
+            PricePerHour = currentOffer.PricePerHour,
+            Subjects = [.. currentOffer.Subjects],
+            ExpiresOn = currentOffer.ExpiresOn
+        };
+    }
+
+    private void ToggleSubject(string subject, bool isSelected)
+    {
+        SaveMessage = string.Empty;
+
+        if (isSelected)
+        {
+            if (!FormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase))
+            {
+                FormModel.Subjects.Add(subject);
+            }
+
+            return;
+        }
+
+        FormModel.Subjects.RemoveAll(selectedSubject => string.Equals(selectedSubject, subject, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void HandleValidSubmit()
+    {
+        TutorOfferStore.SaveCurrentTutorOffer(FormModel);
+        SaveMessage = "Das Tutor-Angebot von Dominik Kautz wurde gespeichert und ist auf der Nachhilfe-Seite sofort sichtbar.";
+    }
+}
