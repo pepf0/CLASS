@@ -1,4 +1,4 @@
-@page "/nachhilfe"
+﻿@page "/nachhilfe"
 @inject TutorOfferStore TutorOfferStore
 @inject TutorDirectoryService TutorDirectoryService
 @inject NavigationManager NavigationManager
@@ -379,19 +379,23 @@
                      role="dialog"
                      aria-modal="true"
                      aria-labelledby="tutor-edit-modal-title"
+                     tabindex="-1"
+                     @ref="EditModalRef"
+                     @onkeydown="HandleTutorModalKeyDown"
                      @onclick:stopPropagation="true">
                 <button type="submit"
                         form="own-offer-edit-form"
                         class="tutor-edit-button tutor-edit-button-modal tutor-edit-button-confirm"
-                        aria-label="Änderungen speichern"
-                        title="Änderungen speichern">
+                        aria-label="Speichern"
+                        title="Speichern">
                     <span aria-hidden="true">@("\u2713")</span>
                 </button>
 
                 <button type="button"
                         class="tutor-modal-close"
                         @onclick="CloseEditModal"
-                        aria-label="Bearbeiten schließen">
+                        aria-label="Abbrechen"
+                        title="Abbrechen">
                     <span aria-hidden="true">&times;</span>
                 </button>
 
@@ -414,9 +418,9 @@
 
                     <div class="tutor-modal-header-content">
                         <div class="tutor-modal-intro">
-                            <p class="tutor-modal-kicker">Eigenes Angebot</p>
-                            <h2 id="tutor-edit-modal-title">Detailansicht bearbeiten</h2>
-                            <p class="tutor-modal-school">@TutorOfferStore.CurrentTutor.Name, @TutorOfferStore.CurrentTutor.SchoolInfo</p>
+                            <p class="tutor-modal-kicker">Tutor Angebot</p>
+                            <h2 id="tutor-edit-modal-title">Angebot bearbeiten</h2>
+                            <p class="tutor-modal-school">@TutorOfferStore.CurrentTutor.Name, @GetClassOnly(TutorOfferStore.CurrentTutor.SchoolInfo)</p>
                             <p class="tutor-edit-subtitle">Passe Beschreibung, Fächer, Preis und Ablauf direkt in diesem Dialog an.</p>
                         </div>
                     </div>
@@ -428,7 +432,7 @@
                     <div class="tutor-modal-body">
                         <section class="tutor-modal-section">
                             <div class="tutor-section-heading">
-                                <h3>Beschreibung</h3>
+                                <h3>Über dich</h3>
                             </div>
 
                             <div class="offer-form-field">
@@ -440,23 +444,50 @@
 
                         <section class="tutor-modal-section">
                             <div class="tutor-section-heading">
-                                <h3>Fächer</h3>
+                                <h3>Nachhilfefächer</h3>
                             </div>
 
                             <div class="offer-form-field">
-                                <div class="subject-selection-grid">
+                                @if (EditFormModel.Subjects.Count > 0)
+                                {
+                                    <div class="subject-selection-list" aria-label="Ausgewählte Fächer">
+                                        @foreach (var subject in EditFormModel.Subjects)
+                                        {
+                                                <button type="button"
+                                                        class="subject-selection-tag"
+                                                        @onclick="() => RemoveEditSubject(subject)"
+                                                        aria-label="@($"{subject} entfernen")"
+                                                        title="Fach entfernen">
+                                                    <span class="subject-selection-tag-remove" aria-hidden="true">&times;</span>
+                                                    <span class="subject-selection-tag-label">@subject</span>
+                                                </button>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="subject-selection-input-row">
+                                    <input class="offer-form-input"
+                                           list="editable-subject-suggestions"
+                                           type="text"
+                                           placeholder="Fach hinzufügen..."
+                                           onkeydown="if (event.key === 'Enter') event.preventDefault();"
+                                           @bind="EditSubjectInput"
+                                           @bind:event="oninput"
+                                           @onkeyup="HandleEditSubjectInputKeyUp" />
+
+                                    <button type="button"
+                                            class="subject-selection-add-button"
+                                            @onclick="AddEditSubject">
+                                        Hinzufügen
+                                    </button>
+                                </div>
+
+                                <datalist id="editable-subject-suggestions">
                                     @foreach (var subject in EditableSubjects)
                                     {
-                                        var isChecked = EditFormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase);
-
-                                        <label class="subject-selection-chip">
-                                            <input type="checkbox"
-                                                   checked="@isChecked"
-                                                   @onchange="args => ToggleEditSubject(subject, args.Value is bool value && value)" />
-                                            <span>@subject</span>
-                                        </label>
+                                        <option value="@subject"></option>
                                     }
-                                </div>
+                                </datalist>
                                 <ValidationMessage For="@(() => EditFormModel.Subjects)" />
                             </div>
                         </section>
@@ -465,14 +496,17 @@
                             <div class="offer-form-layout">
                                 <div class="offer-form-field">
                                     <label for="edit-price">Preis pro Stunde</label>
-                                    <InputNumber id="edit-price"
-                                                 class="offer-form-input"
-                                                 @bind-Value="EditFormModel.PricePerHour" />
+                                    <div class="offer-form-input-prefix-wrap">
+                                        <span class="offer-form-input-prefix" aria-hidden="true">€</span>
+                                        <InputNumber id="edit-price"
+                                                     class="offer-form-input offer-form-input-with-prefix"
+                                                     @bind-Value="EditFormModel.PricePerHour" />
+                                    </div>
                                     <ValidationMessage For="@(() => EditFormModel.PricePerHour)" />
                                 </div>
 
                                 <div class="offer-form-field">
-                                    <label for="edit-expiresOn">Gültig bis</label>
+                                    <label for="edit-expiresOn">Verfügbar bis</label>
                                     <InputDate id="edit-expiresOn"
                                                class="offer-form-input"
                                                @bind-Value="EditFormModel.ExpiresOn" />
@@ -483,6 +517,14 @@
                     </div>
 
                     <ValidationSummary class="tutor-edit-validation" />
+
+                    <div class="tutor-edit-mobile-actions">
+                        <button type="submit"
+                                class="tutor-edit-mobile-save"
+                                aria-label="Speichern">
+                            Speichern
+                        </button>
+                    </div>
                 </EditForm>
             </section>
         </div>
@@ -525,7 +567,11 @@
 
     private ElementReference TutorModalRef;
 
+    private ElementReference EditModalRef;
+
     private bool ShouldFocusTutorModal { get; set; }
+
+    private bool ShouldFocusEditModal { get; set; }
 
     private bool IsDescriptionExpanded { get; set; }
 
@@ -543,6 +589,8 @@
 
     private TutorOfferFormModel EditFormModel { get; set; } = new();
 
+    private string EditSubjectInput { get; set; } = string.Empty;
+
     private bool IsSortDescending => SelectedSortDirection == SortDirectionDescending;
 
     private DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
@@ -558,6 +606,22 @@
             .Concat(["Deutsch", "Ethik", "INSY", "MEDT", "NWT", "SEW", "Sport"])
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(subject => subject);
+
+    private static readonly Dictionary<string, string> SubjectAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Deutsch"] = "Deutsch",
+        ["Ethik"] = "Ethik",
+        ["Informatiksysteme"] = "INSY",
+        ["INSY"] = "INSY",
+        ["Medientechnik"] = "MEDT",
+        ["MEDT"] = "MEDT",
+        ["Naturwissenschaften"] = "NWT",
+        ["NWT"] = "NWT",
+        ["Softwareentwicklung"] = "SEW",
+        ["Software-Entwicklung"] = "SEW",
+        ["SEW"] = "SEW",
+        ["Sport"] = "Sport"
+    };
 
     private List<TutorOffer> FilteredTutors =>
         ApplySorting(
@@ -627,33 +691,77 @@
         {
             Description = tutor.Description,
             PricePerHour = tutor.PricePerHour,
-            Subjects = [.. tutor.Subjects],
+            Subjects = [.. tutor.Subjects.Distinct(StringComparer.OrdinalIgnoreCase)],
             ExpiresOn = tutor.ExpiresOn
         };
+        EditSubjectInput = string.Empty;
 
         CloseTutorDetails();
         IsEditModalOpen = true;
+        ShouldFocusEditModal = true;
     }
 
     private void CloseEditModal()
     {
         IsEditModalOpen = false;
         EditingTutor = null;
+        EditSubjectInput = string.Empty;
+        ShouldFocusEditModal = false;
     }
 
-    private void ToggleEditSubject(string subject, bool isSelected)
+    private void AddEditSubject()
     {
-        if (isSelected)
-        {
-            if (!EditFormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase))
-            {
-                EditFormModel.Subjects.Add(subject);
-            }
+        var normalizedSubject = NormalizeEditableSubject(EditSubjectInput);
 
+        if (string.IsNullOrWhiteSpace(normalizedSubject))
+        {
             return;
         }
 
+        if (!EditFormModel.Subjects.Contains(normalizedSubject, StringComparer.OrdinalIgnoreCase))
+        {
+            EditFormModel.Subjects.Add(normalizedSubject);
+        }
+
+        EditSubjectInput = string.Empty;
+    }
+
+    private void RemoveEditSubject(string subject)
+    {
         EditFormModel.Subjects.RemoveAll(selectedSubject => string.Equals(selectedSubject, subject, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void HandleEditSubjectInputKeyUp(KeyboardEventArgs args)
+    {
+        if (args.Key is "Enter" or "," or ";")
+        {
+            AddEditSubject();
+        }
+    }
+
+    private string NormalizeEditableSubject(string? subjectInput)
+    {
+        var trimmedInput = subjectInput?.Trim();
+
+        if (string.IsNullOrWhiteSpace(trimmedInput))
+        {
+            return string.Empty;
+        }
+
+        if (SubjectAliases.TryGetValue(trimmedInput, out var aliasSubject))
+        {
+            return aliasSubject;
+        }
+
+        var existingSubject = EditableSubjects.FirstOrDefault(subject =>
+            string.Equals(subject, trimmedInput, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(existingSubject))
+        {
+            return existingSubject;
+        }
+
+        return trimmedInput;
     }
 
     private void HandleEditSubmit()
@@ -669,6 +777,12 @@
         {
             ShouldFocusTutorModal = false;
             await TutorModalRef.FocusAsync();
+        }
+
+        if (ShouldFocusEditModal && IsEditModalOpen)
+        {
+            ShouldFocusEditModal = false;
+            await EditModalRef.FocusAsync();
         }
     }
 
@@ -771,6 +885,16 @@
         return tutor.Age > 0
             ? $"{tutor.Age} Jahre"
             : "Nicht angegeben";
+    }
+
+    private static string GetClassOnly(string schoolInfo)
+    {
+        if (string.IsNullOrWhiteSpace(schoolInfo))
+        {
+            return string.Empty;
+        }
+
+        return schoolInfo.Split(',', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? schoolInfo;
     }
 
     private void ToggleMinRating(int rating)
