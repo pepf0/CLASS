@@ -1,0 +1,32 @@
+﻿@page "/register"
+
+<PageTitle>Registrieren</PageTitle>
+
+
+<!--firstname, lastname, passwort, email, brithday-->
+<form id="registerForm" action="/profil" method="get"> <!--Aendere action und methode in der Zukunft-->
+	<h3>Registrieren</h3>
+
+	<label for="firstname" class="label-Form">Vorname</label>
+	<input class="inputBtn-Form input-Form" name="firstname" type="text" required maxlength="100" />
+	
+	<label for="lastname" class="label-Form">Nachname</label>
+	<input class="inputBtn-Form input-Form" type="text" name="lastname" maxlength="100" required value=""/>
+	
+	<label for="email" class="label-Form">Email</label>
+	<input class="inputBtn-Form input-Form" type="email" name="email" maxlength="100" required value="" />
+	
+	<label for="birthday" class="label-Form">Birthday</label>
+	<input class="inputBtn-Form input-Form" type="date" name="birthday" required value=""/>
+	
+	<label for="password" class="label-Form">Password</label>
+	<input class="inputBtn-Form input-Form" type="password" maxlength="255" name="password" value="" required/>
+	
+	<button type="submit" class="btn-secondary-custom">Registrieren</button>
+
+	<p>Hast du bereits einen Account? <a href="/login" class="formLink">Melde dich an</a></p>
+</form>
+
+@code {
+	
+}

@@ -1,0 +1,21 @@
+﻿@page "/login"
+
+<PageTitle>Login</PageTitle>
+
+<h3>Login</h3>
+<form id="loginForm" action="./profil" method="get">
+	<!--User-->
+	<label for="email-login">Email</label>
+	<input type="email" class="inputBtn-Form input-Form" id="email-login"/>
+	<!--Password-->
+	<label for="passwd-login">Passwort</label>
+	<input type="password" class="inputBtn-Form input-Form" id="passwd-login" />
+
+	<button class="btn-secondary-custom" type="submit">Anmelden</button>
+
+	<p>Noch keinen Account? <a class="formLink" href="/register">Account erstellen</a></p>
+</form>
+
+@code {
+
+}
