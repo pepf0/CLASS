@@ -8,33 +8,31 @@ public sealed class TutorDirectoryService(
     TutorOfferStore tutorOfferStore,
     ILogger<TutorDirectoryService> logger)
 {
-    private const string TutorApiUrl = "https://pepf.net/api/class/user";
+    private const string TutorApiUrl = "https://pepf.net/api/class/offer";
 
     public async Task<TutorDirectoryResult> GetTutorsAsync(CancellationToken cancellationToken = default)
     {
-        var localTutors = tutorOfferStore.Tutors.ToList();
-
         try
         {
             var json = await httpClient.GetStringAsync(TutorApiUrl, cancellationToken);
-            var apiUsers = ParseApiUsers(json);
+            var apiOffers = ParseApiOffers(json);
 
-            if (apiUsers.Count == 0)
+            if (apiOffers.Count == 0)
             {
                 return new TutorDirectoryResult(
                     [],
                     LoadedFromApi: false,
-                    Message: "Die API hat keine Tutor-Daten geliefert.");
+                    Message: "Die API hat keine Nachhilfeangebote geliefert.");
             }
 
             return new TutorDirectoryResult(
-                BuildTutorsFromApi(apiUsers, localTutors),
+                BuildTutorsFromApi(apiOffers),
                 LoadedFromApi: true,
-                Message: $"{apiUsers.Count} Tutor-Angebote wurden aus der API geladen.");
+                Message: $"{apiOffers.Count} Nachhilfeangebote wurden aus der API geladen.");
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Tutor data could not be loaded from {TutorApiUrl}. Falling back to local store.", TutorApiUrl);
+            logger.LogWarning(exception, "Tutor offers could not be loaded from {TutorApiUrl}.", TutorApiUrl);
 
             return new TutorDirectoryResult(
                 [],
@@ -43,7 +41,7 @@ public sealed class TutorDirectoryService(
         }
     }
 
-    private static List<ClassUserDto> ParseApiUsers(string json)
+    private static List<ClassOfferDto> ParseApiOffers(string json)
     {
         var serializerOptions = new JsonSerializerOptions
         {
@@ -54,46 +52,47 @@ public sealed class TutorDirectoryService(
 
         if (document.RootElement.ValueKind == JsonValueKind.Array)
         {
-            return JsonSerializer.Deserialize<List<ClassUserDto>>(json, serializerOptions) ?? [];
+            return JsonSerializer.Deserialize<List<ClassOfferDto>>(json, serializerOptions) ?? [];
         }
 
         if (document.RootElement.ValueKind == JsonValueKind.Object
             && document.RootElement.TryGetProperty("value", out var valueElement)
             && valueElement.ValueKind == JsonValueKind.Array)
         {
-            return JsonSerializer.Deserialize<List<ClassUserDto>>(valueElement.GetRawText(), serializerOptions) ?? [];
+            return JsonSerializer.Deserialize<List<ClassOfferDto>>(valueElement.GetRawText(), serializerOptions) ?? [];
         }
 
         return [];
     }
 
-    private static IReadOnlyList<TutorOffer> BuildTutorsFromApi(IEnumerable<ClassUserDto> apiUsers, IReadOnlyList<TutorOffer> localTutors)
+    private IReadOnlyList<TutorOffer> BuildTutorsFromApi(IEnumerable<ClassOfferDto> apiOffers)
     {
-        var defaultExpiry = DateOnly.FromDateTime(DateTime.Today.AddMonths(3));
-        var localByName = localTutors.ToDictionary(
-            tutor => NormalizeKey(tutor.Name),
-            StringComparer.OrdinalIgnoreCase);
-
-        return apiUsers
-            .Select(apiUser =>
+        return apiOffers
+            .Select(apiOffer =>
             {
-                var fullName = $"{apiUser.FirstName} {apiUser.LastName}".Trim();
-                localByName.TryGetValue(NormalizeKey(fullName), out var localTutor);
+                var fullName = $"{apiOffer.FirstName} {apiOffer.LastName}".Trim();
+                var isCurrentTutor = IsCurrentTutor(fullName);
 
                 return new TutorOffer(
                     Name: fullName,
-                    Age: localTutor?.Age ?? 17,
-                    Email: string.IsNullOrWhiteSpace(apiUser.Email) ? localTutor?.Email ?? string.Empty : apiUser.Email,
-                    Description: GetDescription(apiUser, localTutor),
-                    SchoolInfo: GetSchoolInfo(apiUser, localTutor),
-                    Subjects: localTutor?.Subjects ?? [],
-                    Rating: ConvertRating(apiUser.Rating),
-                    ReviewCount: localTutor?.ReviewCount ?? GetReviewCount(apiUser.Rating),
-                    PricePerHour: localTutor?.PricePerHour ?? 0,
-                    ExpiresOn: localTutor?.ExpiresOn ?? defaultExpiry,
-                    ImageUrl: localTutor?.ImageUrl ?? string.Empty);
+                    Age: GetAge(apiOffer.BirthDate),
+                    Email: isCurrentTutor ? tutorOfferStore.CurrentTutor.Email : string.Empty,
+                    Description: GetDescription(apiOffer),
+                    SchoolInfo: GetSchoolInfo(apiOffer),
+                    Subjects: GetSubjects(apiOffer.SubjectList),
+                    Rating: ConvertRating(apiOffer.Rating),
+                    ReviewCount: GetReviewCount(apiOffer.Rating),
+                    PricePerHour: Math.Max(0, apiOffer.MinPrice),
+                    ExpiresOn: GetExpiryDate(apiOffer.Until),
+                    ImageUrl: isCurrentTutor ? tutorOfferStore.CurrentTutor.ImageUrl : string.Empty);
             })
+            .Where(tutor => !string.IsNullOrWhiteSpace(tutor.Name))
             .ToList();
+    }
+
+    private bool IsCurrentTutor(string fullName)
+    {
+        return string.Equals(fullName, tutorOfferStore.CurrentTutor.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     private static decimal ConvertRating(int rating)
@@ -102,44 +101,69 @@ public sealed class TutorDirectoryService(
         return Math.Round(normalized, 1, MidpointRounding.AwayFromZero);
     }
 
-    private static string NormalizeKey(string value)
+    private static string GetDescription(ClassOfferDto apiOffer)
     {
-        return string.Concat(value
-            .Where(character => !char.IsWhiteSpace(character)))
-            .Trim()
-            .ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(apiOffer.Description)
+            ? "Für dieses Angebot sind noch keine weiteren Details hinterlegt."
+            : apiOffer.Description.Trim();
     }
 
-    private static string GetDescription(ClassUserDto apiUser, TutorOffer? localTutor)
-    {
-        if (!string.IsNullOrWhiteSpace(apiUser.Description))
-        {
-            return apiUser.Description.Trim();
-        }
-
-        return localTutor?.Description ?? "Für dieses Tutorprofil sind noch keine weiteren Angebotsdetails hinterlegt.";
-    }
-
-    private static string GetSchoolInfo(ClassUserDto apiUser, TutorOffer? localTutor)
+    private static string GetSchoolInfo(ClassOfferDto apiOffer)
     {
         var infoParts = new List<string>();
 
-        if (!string.IsNullOrWhiteSpace(apiUser.Grade))
+        if (!string.IsNullOrWhiteSpace(apiOffer.Grade))
         {
-            infoParts.Add(apiUser.Grade.Trim());
+            infoParts.Add(apiOffer.Grade.Trim());
         }
 
-        if (!string.IsNullOrWhiteSpace(apiUser.SchoolType))
+        if (!string.IsNullOrWhiteSpace(apiOffer.SchoolType))
         {
-            infoParts.Add(apiUser.SchoolType.Trim());
+            infoParts.Add(apiOffer.SchoolType.Trim());
         }
 
-        if (infoParts.Count > 0)
+        return infoParts.Count > 0
+            ? string.Join(", ", infoParts)
+            : "Tutor bei CLASS";
+    }
+
+    private static string[] GetSubjects(string subjectList)
+    {
+        if (string.IsNullOrWhiteSpace(subjectList))
         {
-            return string.Join(", ", infoParts);
+            return [];
         }
 
-        return localTutor?.SchoolInfo ?? "Tutor bei CLASS";
+        return subjectList
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static int GetAge(DateTimeOffset? birthDate)
+    {
+        if (!birthDate.HasValue)
+        {
+            return 0;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var birthday = DateOnly.FromDateTime(birthDate.Value.DateTime);
+        var age = today.Year - birthday.Year;
+
+        if (birthday.AddYears(age) > today)
+        {
+            age--;
+        }
+
+        return Math.Max(0, age);
+    }
+
+    private static DateOnly GetExpiryDate(DateTimeOffset? until)
+    {
+        return until.HasValue
+            ? DateOnly.FromDateTime(until.Value.DateTime)
+            : DateOnly.FromDateTime(DateTime.Today.AddMonths(3));
     }
 
     private static int GetReviewCount(int rating)

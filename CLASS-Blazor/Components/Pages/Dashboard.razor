@@ -1,6 +1,289 @@
 @page "/dashboard"
+@implements IDisposable
+@inject DashboardDataService DashboardData
+@inject NavigationManager NavigationManager
 
 <PageTitle>Dashboard</PageTitle>
 
-<h1>Dashboard</h1>
-<p>Hier werden alle Statistiken angezeigt.</p>
+<section class="dashboard-page page-with-footer-space">
+    @if (IsLoading)
+    {
+        <div class="empty-state">
+            <h3>Dashboard wird geladen</h3>
+            <p>Kennzahlen, Anfragen und Aktivit&auml;ten werden vorbereitet.</p>
+        </div>
+    }
+    else if (Snapshot is not null)
+    {
+        <header class="dashboard-header">
+            <div>
+                <p class="dashboard-kicker">Tutor Dashboard</p>
+                <h1>&Uuml;berblick f&uuml;r deine Nachhilfe</h1>
+                <p>Anfragen, Umsatz und gebuchte Stunden auf einen Blick.</p>
+            </div>
+
+            <button type="button" class="dashboard-quick-action" @onclick="GoToOffer">
+                <span>@(Snapshot.HasOffer ? "Angebot bearbeiten" : "Angebot erstellen")</span>
+                <small>@(Snapshot.HasOffer ? "Profil aktualisieren" : "Profil vervollst&auml;ndigen")</small>
+            </button>
+        </header>
+
+        <section class="dashboard-summary-grid" aria-label="Dashboard Zusammenfassung">
+            <div class="dashboard-summary-stack">
+                <article class="dashboard-summary-card dashboard-summary-card-requests">
+                    <span class="dashboard-summary-label">Offene Anfragen</span>
+                    <strong class="dashboard-summary-value">@OpenRequests.Count</strong>
+                    <span class="dashboard-summary-meta">wartet auf Antwort</span>
+                </article>
+
+                <article class="dashboard-summary-card dashboard-summary-card-completed">
+                    <span class="dashboard-summary-label">Abgeschlossen</span>
+                    <strong class="dashboard-summary-value">@Snapshot.CompletedHours h</strong>
+                    <span class="dashboard-summary-meta">gegebene Nachhilfestunden</span>
+                </article>
+            </div>
+
+            <article class="dashboard-subject-panel">
+                <div class="dashboard-subject-heading">
+                    <div>
+                        <p class="dashboard-section-kicker">Fachverteilung</p>
+                        <h2>Gegebene Stunden</h2>
+                    </div>
+                    <span class="dashboard-subject-total">@TotalSubjectHours.ToString("0.#") h</span>
+                </div>
+
+                <div class="dashboard-subject-content">
+                    <svg class="dashboard-subject-donut"
+                         viewBox="0 0 120 120"
+                         role="img"
+                         aria-label="@SubjectDonutAriaLabel">
+                        <circle class="dashboard-subject-donut-base" cx="60" cy="60" r="46"></circle>
+                        @foreach (var segment in SubjectSegments)
+                        {
+                            <circle class="dashboard-subject-donut-segment"
+                                    cx="60"
+                                    cy="60"
+                                    r="46"
+                                    pathLength="100"
+                                    stroke="@segment.Color"
+                                    stroke-dasharray="@segment.DashArray"
+                                    stroke-dashoffset="@segment.DashOffset"
+                                    aria-hidden="true"></circle>
+                        }
+                    </svg>
+
+                    <div class="dashboard-subject-legend">
+                        @foreach (var subject in Snapshot.SubjectHours)
+                        {
+                            <div class="dashboard-subject-legend-item" @key="subject.Subject">
+                                <span class="dashboard-subject-color" style="background:@subject.Color"></span>
+                                <span>@subject.Subject</span>
+                                <strong>@subject.Hours.ToString("0.#") h</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <section class="dashboard-chart-grid" aria-label="Dashboard Diagramme">
+            <DashboardChart Title="Einnahmen pro Monat"
+                            Kicker="Umsatz"
+                            Data="SelectedYearRevenue"
+                            IsCurrency="true"
+                            PeriodLabel="@SelectedRevenueYear.ToString()"
+                            OnPreviousPeriod="ShowPreviousRevenueYear"
+                            OnNextPeriod="ShowNextRevenueYear" />
+        </section>
+
+        <section class="dashboard-work-grid" aria-label="Anfragen und Aktivit&auml;ten">
+            <DashboardRequestList Requests="OpenRequests"
+                                  OnAccept="AcceptRequest"
+                                  OnDecline="DeclineRequest" />
+            <DashboardActivityFeed Activities="Activities" />
+        </section>
+    }
+</section>
+
+@code {
+    private static readonly (string Title, string Detail, string Tone)[] FeedTemplates =
+    {
+        ("Neue Anfrage", "Eine neue Buchungsanfrage wurde synchronisiert.", "info"),
+        ("Stunde abgeschlossen", "Eine erledigte Einheit wurde im Verlauf erfasst.", "success"),
+        ("Anfrage aktualisiert", "Status und offene Aufgaben wurden abgeglichen.", "neutral")
+    };
+
+    private static readonly string[] MonthLabels =
+    {
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "Mai",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Okt",
+        "Nov",
+        "Dez"
+    };
+
+    private static readonly Dictionary<int, decimal[]> RevenueByYear = new()
+    {
+        [2024] = new[] { 0m, 0m, 18m, 0m, 36m, 18m, 0m, 0m, 54m, 72m, 36m, 72m },
+        [2025] = new[] { 54m, 72m, 90m, 72m, 0m, 34m, 18m, 0m, 72m, 90m, 54m, 108m },
+        [2026] = new[] { 72m, 96m, 126m, 126m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m }
+    };
+
+    private DashboardSnapshot? Snapshot { get; set; }
+
+    private List<TutorRequest> OpenRequests { get; set; } = new();
+
+    private List<DashboardActivity> Activities { get; set; } = new();
+
+    private CancellationTokenSource? FeedCancellation { get; set; }
+
+    private bool IsLoading { get; set; } = true;
+
+    private int FeedIndex { get; set; }
+
+    private int SelectedRevenueYear { get; set; } = DateTime.Today.Year;
+
+    private IReadOnlyList<DashboardChartPoint> SelectedYearRevenue
+    {
+        get
+        {
+            var values = RevenueByYear.TryGetValue(SelectedRevenueYear, out var yearValues)
+                ? yearValues
+                : new decimal[12];
+
+            return MonthLabels
+                .Select((month, index) => new DashboardChartPoint(month, values.ElementAtOrDefault(index)))
+                .ToList();
+        }
+    }
+
+    private decimal TotalSubjectHours => Snapshot?.SubjectHours.Sum(subject => subject.Hours) ?? 0m;
+
+    private string SubjectDonutAriaLabel =>
+        Snapshot is null
+            ? "Keine Fachstunden vorhanden"
+            : $"Fachverteilung: {string.Join(", ", Snapshot.SubjectHours.Select(subject => $"{subject.Subject} {subject.Hours:0.#} Stunden"))}";
+
+    private IReadOnlyList<SubjectDonutSegment> SubjectSegments
+    {
+        get
+        {
+            if (Snapshot is null || TotalSubjectHours <= 0)
+            {
+                return Array.Empty<SubjectDonutSegment>();
+            }
+
+            var offset = 0m;
+            var segments = new List<SubjectDonutSegment>();
+
+            foreach (var subject in Snapshot.SubjectHours)
+            {
+                var share = decimal.Round(subject.Hours / TotalSubjectHours * 100m, 2);
+                segments.Add(new SubjectDonutSegment(
+                    subject.Color,
+                    $"{FormatPercent(share)} {FormatPercent(100m - share)}",
+                    FormatPercent(-offset)));
+                offset += share;
+            }
+
+            return segments;
+        }
+    }
+
+    private static string FormatPercent(decimal value)
+    {
+        return value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Snapshot = await DashboardData.GetDashboardAsync();
+        OpenRequests = Snapshot.OpenRequests.ToList();
+        Activities = Snapshot.Activities.ToList();
+        IsLoading = false;
+
+        FeedCancellation = new CancellationTokenSource();
+        _ = RefreshFeedAsync(FeedCancellation.Token);
+    }
+
+    private void AcceptRequest(TutorRequest request)
+    {
+        CompleteRequest(request, true);
+    }
+
+    private void DeclineRequest(TutorRequest request)
+    {
+        CompleteRequest(request, false);
+    }
+
+    private void CompleteRequest(TutorRequest request, bool isAccepted)
+    {
+        OpenRequests.RemoveAll(openRequest => openRequest.Id == request.Id);
+
+        AddActivity(
+            isAccepted ? "Anfrage angenommen" : "Anfrage abgelehnt",
+            $"{request.Name} - {request.Subject} fuer {request.PricePerHour} EUR / h.",
+            isAccepted ? "success" : "warning");
+    }
+
+    private void AddActivity(string title, string detail, string tone)
+    {
+        Activities.Insert(0, new DashboardActivity(Guid.NewGuid(), title, detail, DateTime.Now, tone));
+
+        if (Activities.Count > 6)
+        {
+            Activities.RemoveRange(6, Activities.Count - 6);
+        }
+    }
+
+    private async Task RefreshFeedAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(14));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var template = FeedTemplates[FeedIndex % FeedTemplates.Length];
+                FeedIndex++;
+
+                await InvokeAsync(() =>
+                {
+                    AddActivity(template.Title, template.Detail, template.Tone);
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void GoToOffer()
+    {
+        NavigationManager.NavigateTo("/profil");
+    }
+
+    private void ShowPreviousRevenueYear()
+    {
+        SelectedRevenueYear--;
+    }
+
+    private void ShowNextRevenueYear()
+    {
+        SelectedRevenueYear++;
+    }
+
+    public void Dispose()
+    {
+        FeedCancellation?.Cancel();
+        FeedCancellation?.Dispose();
+    }
+}

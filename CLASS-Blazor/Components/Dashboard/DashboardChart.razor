@@ -1,0 +1,101 @@
+@namespace CLASS_Blazor.Components.Dashboard
+
+<article class="dashboard-panel dashboard-chart-panel">
+    <div class="dashboard-panel-heading">
+        <div>
+            <p class="dashboard-section-kicker">@Kicker</p>
+            <h2>@Title</h2>
+        </div>
+        <div class="dashboard-chart-heading-actions">
+            @if (ShowPeriodNavigation)
+            {
+                <button type="button"
+                        class="dashboard-chart-nav-button"
+                        @onclick="OnPreviousPeriod"
+                        aria-label="Vorheriges Jahr anzeigen">
+                    &larr;
+                </button>
+                <span class="dashboard-chart-period">@PeriodLabel</span>
+                <button type="button"
+                        class="dashboard-chart-nav-button"
+                        @onclick="OnNextPeriod"
+                        aria-label="N&auml;chstes Jahr anzeigen">
+                    &rarr;
+                </button>
+            }
+
+            <span class="dashboard-chart-total">@FormattedTotal</span>
+        </div>
+    </div>
+
+    <div class="dashboard-chart" role="img" aria-label="@AriaLabel">
+        @foreach (var point in Data)
+        {
+            var fillPercent = GetFillPercent(point);
+
+            <div class="dashboard-chart-column">
+                <span class="dashboard-chart-value">@FormatValue(point.Value)</span>
+                <span class="dashboard-chart-track">
+                    <span class="dashboard-chart-bar" style="@GetFillStyle(fillPercent)" aria-hidden="true"></span>
+                </span>
+                <span class="dashboard-chart-label">@point.Label</span>
+            </div>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Kicker { get; set; } = "Verlauf";
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DashboardChartPoint> Data { get; set; } = Array.Empty<DashboardChartPoint>();
+
+    [Parameter]
+    public string Unit { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool IsCurrency { get; set; }
+
+    [Parameter]
+    public string PeriodLabel { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback OnPreviousPeriod { get; set; }
+
+    [Parameter]
+    public EventCallback OnNextPeriod { get; set; }
+
+    private bool ShowPeriodNavigation => OnPreviousPeriod.HasDelegate || OnNextPeriod.HasDelegate || !string.IsNullOrWhiteSpace(PeriodLabel);
+
+    private decimal MaxValue => Data.Count == 0 ? 1 : Math.Max(1, Data.Max(point => point.Value));
+
+    private decimal Total => Data.Sum(point => point.Value);
+
+    private string FormattedTotal => IsCurrency ? $"{Total:0} EUR" : $"{Total:0} {Unit}".Trim();
+
+    private string AriaLabel => $"{Title}: {string.Join(", ", Data.Select(point => $"{point.Label} {FormatValue(point.Value)}"))}";
+
+    private int GetFillPercent(DashboardChartPoint point)
+    {
+        if (point.Value <= 0)
+        {
+            return 0;
+        }
+
+        return (int)Math.Clamp(decimal.Round(point.Value / MaxValue * 100, 0), 1, 100);
+    }
+
+    private static string GetFillStyle(int fillPercent)
+    {
+        return $"--fill:{fillPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)}%;";
+    }
+
+    private string FormatValue(decimal value)
+    {
+        return IsCurrency ? $"{value:0} EUR" : $"{value:0} {Unit}".Trim();
+    }
+}

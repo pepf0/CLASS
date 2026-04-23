@@ -6,6 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddScoped<DashboardDataService>();
 builder.Services.AddScoped<TutorOfferStore>();
 builder.Services.AddHttpClient<TutorDirectoryService>(client =>
 {

@@ -1,0 +1,52 @@
+@namespace CLASS_Blazor.Components.Dashboard
+
+<article class="dashboard-panel dashboard-activity-panel">
+    <div class="dashboard-panel-heading">
+        <div>
+            <p class="dashboard-section-kicker">Live Feed</p>
+            <h2>Letzte Aktivit&auml;ten</h2>
+        </div>
+        <span class="dashboard-live-indicator">Live</span>
+    </div>
+
+    <div class="dashboard-activity-list">
+        @foreach (var activity in Activities)
+        {
+            <section class="dashboard-activity-item dashboard-tone-@activity.Tone" @key="activity.Id">
+                <span class="dashboard-activity-dot" aria-hidden="true"></span>
+                <div>
+                    <strong>@activity.Title</strong>
+                    <p>@activity.Detail</p>
+                    <time datetime="@activity.OccurredAt.ToString("O")">@GetRelativeTime(activity.OccurredAt)</time>
+                </div>
+            </section>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DashboardActivity> Activities { get; set; } = Array.Empty<DashboardActivity>();
+
+    private static string GetRelativeTime(DateTime dateTime)
+    {
+        var delta = DateTime.Now - dateTime;
+
+        if (delta.TotalMinutes < 1)
+        {
+            return "gerade eben";
+        }
+
+        if (delta.TotalMinutes < 60)
+        {
+            return $"vor {(int)delta.TotalMinutes} Min.";
+        }
+
+        if (delta.TotalHours < 24)
+        {
+            return $"vor {(int)delta.TotalHours} Std.";
+        }
+
+        return $"vor {(int)delta.TotalDays} Tg.";
+    }
+}

@@ -650,7 +650,7 @@
 
         if (LoadedFromApi)
         {
-            SyncCurrentTutorOfferIntoDirectory();
+            SyncCurrentTutorOfferIntoDirectory(replaceExisting: false);
         }
 
         IsLoading = false;
@@ -831,15 +831,19 @@
         IsDescriptionExpanded = !IsDescriptionExpanded;
     }
 
-    private void SyncCurrentTutorOfferIntoDirectory()
+    private void SyncCurrentTutorOfferIntoDirectory(bool replaceExisting = true)
     {
         var currentTutorOffer = TutorOfferStore.GetCurrentTutorOffer();
         var tutors = AllTutors.ToList();
         var index = tutors.FindIndex(IsOwnTutorOffer);
 
-        if (index >= 0)
+        if (index >= 0 && replaceExisting)
         {
             tutors[index] = currentTutorOffer;
+        }
+        else if (index < 0)
+        {
+            tutors.Add(currentTutorOffer);
         }
 
         AllTutors = tutors;

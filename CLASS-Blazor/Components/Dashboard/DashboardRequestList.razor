@@ -1,0 +1,56 @@
+@namespace CLASS_Blazor.Components.Dashboard
+
+<article class="dashboard-panel dashboard-request-panel">
+    <div class="dashboard-panel-heading">
+        <div>
+            <p class="dashboard-section-kicker">Anfragen</p>
+            <h2>Offene Anfragen</h2>
+        </div>
+        <span class="dashboard-count-badge">@Requests.Count offen</span>
+    </div>
+
+    @if (Requests.Count == 0)
+    {
+        <div class="dashboard-empty-inline">
+            <strong>Keine offenen Anfragen</strong>
+            <span>Neue Buchungen erscheinen automatisch in dieser Liste.</span>
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-request-list">
+            @foreach (var request in Requests)
+            {
+                <section class="dashboard-request-item" @key="request.Id">
+                    <div class="dashboard-request-main">
+                        <strong>@request.Name</strong>
+                        <span>@request.Subject</span>
+                    </div>
+                    <div class="dashboard-request-meta">
+                        <span>@request.PricePerHour EUR / h</span>
+                        <time datetime="@request.RequestedOn.ToString("yyyy-MM-dd")">@request.RequestedOn.ToString("dd.MM.yyyy")</time>
+                    </div>
+                    <div class="dashboard-request-actions">
+                        <button type="button" class="dashboard-action-button dashboard-action-accept" @onclick="() => OnAccept.InvokeAsync(request)">
+                            Annehmen
+                        </button>
+                        <button type="button" class="dashboard-action-button dashboard-action-decline" @onclick="() => OnDecline.InvokeAsync(request)">
+                            Ablehnen
+                        </button>
+                    </div>
+                </section>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TutorRequest> Requests { get; set; } = Array.Empty<TutorRequest>();
+
+    [Parameter]
+    public EventCallback<TutorRequest> OnAccept { get; set; }
+
+    [Parameter]
+    public EventCallback<TutorRequest> OnDecline { get; set; }
+}
