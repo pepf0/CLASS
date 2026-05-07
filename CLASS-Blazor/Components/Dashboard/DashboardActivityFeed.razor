@@ -9,19 +9,29 @@
         <span class="dashboard-live-indicator">Live</span>
     </div>
 
-    <div class="dashboard-activity-list">
-        @foreach (var activity in Activities)
-        {
-            <section class="dashboard-activity-item dashboard-tone-@activity.Tone" @key="activity.Id">
-                <span class="dashboard-activity-dot" aria-hidden="true"></span>
-                <div>
-                    <strong>@activity.Title</strong>
-                    <p>@activity.Detail</p>
-                    <time datetime="@activity.OccurredAt.ToString("O")">@GetRelativeTime(activity.OccurredAt)</time>
-                </div>
-            </section>
-        }
-    </div>
+    @if (Activities.Count == 0)
+    {
+        <div class="dashboard-empty-inline">
+            <strong>Noch keine Aktivit&auml;ten</strong>
+            <span>Neue Ereignisse erscheinen automatisch hier.</span>
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-activity-list">
+            @foreach (var activity in Activities.Take(5))
+            {
+                <section class="dashboard-activity-item dashboard-tone-@activity.Tone" @key="activity.Id">
+                    <span class="dashboard-activity-dot" aria-hidden="true"></span>
+                    <div>
+                        <strong>@activity.Title</strong>
+                        <p>@activity.Detail</p>
+                        <time datetime="@activity.OccurredAt.ToString("O")">@GetRelativeTime(activity.OccurredAt)</time>
+                    </div>
+                </section>
+            }
+        </div>
+    }
 </article>
 
 @code {

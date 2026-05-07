@@ -7,7 +7,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddScoped<DashboardDataService>();
-builder.Services.AddScoped<TutorOfferStore>();
 builder.Services.AddHttpClient<TutorDirectoryService>(client =>
 {
     client.BaseAddress = new Uri("https://pepf.net/");

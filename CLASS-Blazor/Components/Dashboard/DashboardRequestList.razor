@@ -1,12 +1,12 @@
 @namespace CLASS_Blazor.Components.Dashboard
 
-<article class="dashboard-panel dashboard-request-panel">
+<article class="dashboard-panel dashboard-request-panel" id="dashboard-requests">
     <div class="dashboard-panel-heading">
         <div>
             <p class="dashboard-section-kicker">Anfragen</p>
             <h2>Offene Anfragen</h2>
         </div>
-        <span class="dashboard-count-badge">@Requests.Count offen</span>
+        <a class="dashboard-count-badge" href="#dashboard-requests">@Requests.Count offen</a>
     </div>
 
     @if (Requests.Count == 0)
@@ -27,7 +27,7 @@
                         <span>@request.Subject</span>
                     </div>
                     <div class="dashboard-request-meta">
-                        <span>@request.PricePerHour EUR / h</span>
+                        <span class="dashboard-request-price">@request.PricePerHour EUR / h</span>
                         <time datetime="@request.RequestedOn.ToString("yyyy-MM-dd")">@request.RequestedOn.ToString("dd.MM.yyyy")</time>
                     </div>
                     <div class="dashboard-request-actions">

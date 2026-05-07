@@ -52,10 +52,10 @@ public sealed class DashboardDataService
             ],
             Activities:
             [
-                new(Guid.NewGuid(), "Neue Anfrage", "Mira m\u00f6chte INSY-Nachhilfe buchen.", DateTime.Now.AddMinutes(-18), "info"),
-                new(Guid.NewGuid(), "Stunde abgeschlossen", "Deutsch-Einheit mit Leon wurde markiert.", DateTime.Now.AddHours(-2), "success"),
-                new(Guid.NewGuid(), "Anfrage angenommen", "MEDT-Termin f\u00fcr morgen wurde best\u00e4tigt.", DateTime.Now.AddHours(-5), "success"),
-                new(Guid.NewGuid(), "Angebot aktualisiert", "Preis und F\u00e4cherauswahl wurden gespeichert.", DateTime.Now.AddDays(-1), "neutral")
+                new(Guid.NewGuid(), "Neue Anfrage", "Mira fragt INSY an.", DateTime.Now.AddMinutes(-2), "info"),
+                new(Guid.NewGuid(), "Stunde abgeschlossen", "Deutsch mit Leon erledigt.", DateTime.Now.AddMinutes(-10), "success"),
+                new(Guid.NewGuid(), "Anfrage angenommen", "MEDT-Termin bestätigt.", DateTime.Now.AddMinutes(-27), "success"),
+                new(Guid.NewGuid(), "Anfrage aktualisiert", "Preis wurde gespeichert.", DateTime.Now.AddHours(-2), "neutral")
             ]);
 
         return Task.FromResult(snapshot);

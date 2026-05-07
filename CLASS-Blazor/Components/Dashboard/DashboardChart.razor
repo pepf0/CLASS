@@ -11,20 +11,18 @@
             {
                 <button type="button"
                         class="dashboard-chart-nav-button"
-                        @onclick="OnPreviousPeriod"
+                        @onclick="HandlePreviousPeriod"
                         aria-label="Vorheriges Jahr anzeigen">
                     &larr;
                 </button>
                 <span class="dashboard-chart-period">@PeriodLabel</span>
                 <button type="button"
                         class="dashboard-chart-nav-button"
-                        @onclick="OnNextPeriod"
+                        @onclick="HandleNextPeriod"
                         aria-label="N&auml;chstes Jahr anzeigen">
                     &rarr;
                 </button>
             }
-
-            <span class="dashboard-chart-total">@FormattedTotal</span>
         </div>
     </div>
 
@@ -32,9 +30,10 @@
         @foreach (var point in Data)
         {
             var fillPercent = GetFillPercent(point);
+            var isEmpty = point.Value <= 0;
 
-            <div class="dashboard-chart-column">
-                <span class="dashboard-chart-value">@FormatValue(point.Value)</span>
+            <div class="dashboard-chart-column @(isEmpty ? "dashboard-chart-column-empty" : string.Empty)">
+                <span class="dashboard-chart-value">@(isEmpty ? "Keine Daten" : FormatValue(point.Value))</span>
                 <span class="dashboard-chart-track">
                     <span class="dashboard-chart-bar" style="@GetFillStyle(fillPercent)" aria-hidden="true"></span>
                 </span>
@@ -73,10 +72,6 @@
 
     private decimal MaxValue => Data.Count == 0 ? 1 : Math.Max(1, Data.Max(point => point.Value));
 
-    private decimal Total => Data.Sum(point => point.Value);
-
-    private string FormattedTotal => IsCurrency ? $"{Total:0} EUR" : $"{Total:0} {Unit}".Trim();
-
     private string AriaLabel => $"{Title}: {string.Join(", ", Data.Select(point => $"{point.Label} {FormatValue(point.Value)}"))}";
 
     private int GetFillPercent(DashboardChartPoint point)
@@ -92,6 +87,16 @@
     private static string GetFillStyle(int fillPercent)
     {
         return $"--fill:{fillPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)}%;";
+    }
+
+    private Task HandlePreviousPeriod()
+    {
+        return OnPreviousPeriod.InvokeAsync();
+    }
+
+    private Task HandleNextPeriod()
+    {
+        return OnNextPeriod.InvokeAsync();
     }
 
     private string FormatValue(decimal value)

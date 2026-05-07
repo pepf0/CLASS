@@ -5,7 +5,6 @@ namespace CLASS_Blazor.Services;
 
 public sealed class TutorDirectoryService(
     HttpClient httpClient,
-    TutorOfferStore tutorOfferStore,
     ILogger<TutorDirectoryService> logger)
 {
     private const string TutorApiUrl = "https://pepf.net/api/class/offer";
@@ -65,18 +64,17 @@ public sealed class TutorDirectoryService(
         return [];
     }
 
-    private IReadOnlyList<TutorOffer> BuildTutorsFromApi(IEnumerable<ClassOfferDto> apiOffers)
+    private static IReadOnlyList<TutorOffer> BuildTutorsFromApi(IEnumerable<ClassOfferDto> apiOffers)
     {
         return apiOffers
             .Select(apiOffer =>
             {
                 var fullName = $"{apiOffer.FirstName} {apiOffer.LastName}".Trim();
-                var isCurrentTutor = IsCurrentTutor(fullName);
 
                 return new TutorOffer(
                     Name: fullName,
                     Age: GetAge(apiOffer.BirthDate),
-                    Email: isCurrentTutor ? tutorOfferStore.CurrentTutor.Email : string.Empty,
+                    Email: apiOffer.Email.Trim(),
                     Description: GetDescription(apiOffer),
                     SchoolInfo: GetSchoolInfo(apiOffer),
                     Subjects: GetSubjects(apiOffer.SubjectList),
@@ -84,15 +82,10 @@ public sealed class TutorDirectoryService(
                     ReviewCount: GetReviewCount(apiOffer.Rating),
                     PricePerHour: Math.Max(0, apiOffer.MinPrice),
                     ExpiresOn: GetExpiryDate(apiOffer.Until),
-                    ImageUrl: isCurrentTutor ? tutorOfferStore.CurrentTutor.ImageUrl : string.Empty);
+                    ImageUrl: apiOffer.ImageUrl.Trim());
             })
             .Where(tutor => !string.IsNullOrWhiteSpace(tutor.Name))
             .ToList();
-    }
-
-    private bool IsCurrentTutor(string fullName)
-    {
-        return string.Equals(fullName, tutorOfferStore.CurrentTutor.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     private static decimal ConvertRating(int rating)

@@ -16,6 +16,9 @@ public sealed class ClassOfferDto
     [JsonPropertyName("last_name")]
     public string LastName { get; set; } = string.Empty;
 
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
     [JsonPropertyName("grade")]
     public string Grade { get; set; } = string.Empty;
 
@@ -39,4 +42,7 @@ public sealed class ClassOfferDto
 
     [JsonPropertyName("subject_list")]
     public string SubjectList { get; set; } = string.Empty;
+
+    [JsonPropertyName("image_url")]
+    public string ImageUrl { get; set; } = string.Empty;
 }

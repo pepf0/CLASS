@@ -1,7 +1,5 @@
 ﻿@page "/nachhilfe"
-@inject TutorOfferStore TutorOfferStore
 @inject TutorDirectoryService TutorDirectoryService
-@inject NavigationManager NavigationManager
 
 <PageTitle>Nachhilfe</PageTitle>
 
@@ -141,18 +139,6 @@
                          @onclick="() => OpenTutorDetails(tutor)"
                          @onkeydown="@(args => HandleTutorCardKeyDown(args, tutor))"
                          aria-label="@($"Details zu {tutor.Name} anzeigen")">
-                    @if (IsOwnTutorOffer(tutor))
-                    {
-                        <button type="button"
-                                class="tutor-edit-button tutor-edit-button-card"
-                                @onclick="() => BeginEditingOffer(tutor)"
-                                @onclick:stopPropagation="true"
-                                aria-label="Eigenes Angebot bearbeiten"
-                                title="Angebot bearbeiten">
-                            <span aria-hidden="true">@("\u270E")</span>
-                        </button>
-                    }
-
                     @if (HasTutorImage(tutor))
                     {
                         <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
@@ -227,17 +213,6 @@
                      @ref="TutorModalRef"
                      @onkeydown="HandleTutorModalKeyDown"
                      @onclick:stopPropagation="true">
-                @if (IsOwnTutorOffer(SelectedTutor))
-                {
-                    <button type="button"
-                            class="tutor-edit-button tutor-edit-button-modal"
-                            @onclick="() => BeginEditingOffer(SelectedTutor)"
-                            aria-label="Eigenes Angebot bearbeiten"
-                            title="Angebot bearbeiten">
-                        <span aria-hidden="true">@("\u270E")</span>
-                    </button>
-                }
-
                 <button type="button"
                         class="tutor-modal-close"
                         @onclick="CloseTutorDetails"
@@ -267,17 +242,20 @@
                             <p class="tutor-modal-kicker">Tutorprofil</p>
                             <h2 id="tutor-modal-title">@SelectedTutor.Name</h2>
                             <p class="tutor-modal-school">@SelectedTutor.SchoolInfo</p>
-                            <a href="@GetGmailComposeLink(SelectedTutor)"
-                               class="tutor-modal-email"
-                               target="_blank"
-                               rel="noopener noreferrer">
-                                <span class="tutor-modal-email-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" focusable="false">
-                                        <path d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25Zm1.5.47v.12l6.5 4.88 6.5-4.88v-.12a.25.25 0 0 0-.25-.25H5.75a.25.25 0 0 0-.25.25Zm13 1.99-5.6 4.2a1.5 1.5 0 0 1-1.8 0l-5.6-4.2v8.04c0 .14.11.25.25.25h12.5a.25.25 0 0 0 .25-.25Z" />
-                                    </svg>
-                                </span>
-                                <span>@SelectedTutor.Email</span>
-                            </a>
+                            @if (HasTutorEmail(SelectedTutor))
+                            {
+                                <a href="@GetGmailComposeLink(SelectedTutor)"
+                                   class="tutor-modal-email"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+                                    <span class="tutor-modal-email-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" focusable="false">
+                                            <path d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25Zm1.5.47v.12l6.5 4.88 6.5-4.88v-.12a.25.25 0 0 0-.25-.25H5.75a.25.25 0 0 0-.25.25Zm13 1.99-5.6 4.2a1.5 1.5 0 0 1-1.8 0l-5.6-4.2v8.04c0 .14.11.25.25.25h12.5a.25.25 0 0 0 .25-.25Z" />
+                                        </svg>
+                                    </span>
+                                    <span>@SelectedTutor.Email</span>
+                                </a>
+                            }
                         </div>
 
                         <div class="tutor-modal-highlights">
@@ -372,163 +350,6 @@
         </div>
     }
 
-    @if (IsEditModalOpen)
-    {
-        <div class="tutor-modal-overlay" @onclick="CloseEditModal">
-            <section class="tutor-modal tutor-edit-modal"
-                     role="dialog"
-                     aria-modal="true"
-                     aria-labelledby="tutor-edit-modal-title"
-                     tabindex="-1"
-                     @ref="EditModalRef"
-                     @onkeydown="HandleTutorModalKeyDown"
-                     @onclick:stopPropagation="true">
-                <button type="submit"
-                        form="own-offer-edit-form"
-                        class="tutor-edit-button tutor-edit-button-modal tutor-edit-button-confirm"
-                        aria-label="Speichern"
-                        title="Speichern">
-                    <span aria-hidden="true">@("\u2713")</span>
-                </button>
-
-                <button type="button"
-                        class="tutor-modal-close"
-                        @onclick="CloseEditModal"
-                        aria-label="Abbrechen"
-                        title="Abbrechen">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-
-                <div class="tutor-modal-header">
-                    @if (EditingTutor is not null && HasTutorImage(EditingTutor))
-                    {
-                        <img src="@EditingTutor.ImageUrl" alt="Tutor @EditingTutor.Name" class="tutor-modal-image" />
-                    }
-                    else
-                    {
-                        <div class="tutor-modal-image tutor-image-placeholder tutor-modal-image-placeholder" role="img" aria-label="Kein Bild für @TutorOfferStore.CurrentTutor.Name vorhanden">
-                            <span class="tutor-image-placeholder-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" focusable="false">
-                                    <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-6 2.24-6 5v1h12v-1c0-2.76-2.69-5-6-5Z" />
-                                </svg>
-                            </span>
-                            <span class="tutor-image-placeholder-text">Kein Bild vorhanden</span>
-                        </div>
-                    }
-
-                    <div class="tutor-modal-header-content">
-                        <div class="tutor-modal-intro">
-                            <p class="tutor-modal-kicker">Tutor Angebot</p>
-                            <h2 id="tutor-edit-modal-title">Angebot bearbeiten</h2>
-                            <p class="tutor-modal-school">@TutorOfferStore.CurrentTutor.Name, @GetClassOnly(TutorOfferStore.CurrentTutor.SchoolInfo)</p>
-                            <p class="tutor-edit-subtitle">Passe Beschreibung, Fächer, Preis und Ablauf direkt in diesem Dialog an.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <EditForm id="own-offer-edit-form" Model="EditFormModel" OnValidSubmit="HandleEditSubmit" class="offer-form tutor-edit-form">
-                    <DataAnnotationsValidator />
-
-                    <div class="tutor-modal-body">
-                        <section class="tutor-modal-section">
-                            <div class="tutor-section-heading">
-                                <h3>Über dich</h3>
-                            </div>
-
-                            <div class="offer-form-field">
-                                <InputTextArea class="offer-form-input offer-form-textarea"
-                                               @bind-Value="EditFormModel.Description" />
-                                <ValidationMessage For="@(() => EditFormModel.Description)" />
-                            </div>
-                        </section>
-
-                        <section class="tutor-modal-section">
-                            <div class="tutor-section-heading">
-                                <h3>Nachhilfefächer</h3>
-                            </div>
-
-                            <div class="offer-form-field">
-                                @if (EditFormModel.Subjects.Count > 0)
-                                {
-                                    <div class="subject-selection-list" aria-label="Ausgewählte Fächer">
-                                        @foreach (var subject in EditFormModel.Subjects)
-                                        {
-                                                <button type="button"
-                                                        class="subject-selection-tag"
-                                                        @onclick="() => RemoveEditSubject(subject)"
-                                                        aria-label="@($"{subject} entfernen")"
-                                                        title="Fach entfernen">
-                                                    <span class="subject-selection-tag-remove" aria-hidden="true">&times;</span>
-                                                    <span class="subject-selection-tag-label">@subject</span>
-                                                </button>
-                                        }
-                                    </div>
-                                }
-
-                                <div class="subject-selection-input-row">
-                                    <input class="offer-form-input"
-                                           list="editable-subject-suggestions"
-                                           type="text"
-                                           placeholder="Fach hinzufügen..."
-                                           onkeydown="if (event.key === 'Enter') event.preventDefault();"
-                                           @bind="EditSubjectInput"
-                                           @bind:event="oninput"
-                                           @onkeyup="HandleEditSubjectInputKeyUp" />
-
-                                    <button type="button"
-                                            class="subject-selection-add-button"
-                                            @onclick="AddEditSubject">
-                                        Hinzufügen
-                                    </button>
-                                </div>
-
-                                <datalist id="editable-subject-suggestions">
-                                    @foreach (var subject in EditableSubjects)
-                                    {
-                                        <option value="@subject"></option>
-                                    }
-                                </datalist>
-                                <ValidationMessage For="@(() => EditFormModel.Subjects)" />
-                            </div>
-                        </section>
-
-                        <section class="tutor-modal-section tutor-edit-metrics-section">
-                            <div class="offer-form-layout">
-                                <div class="offer-form-field">
-                                    <label for="edit-price">Preis pro Stunde</label>
-                                    <div class="offer-form-input-prefix-wrap">
-                                        <span class="offer-form-input-prefix" aria-hidden="true">€</span>
-                                        <InputNumber id="edit-price"
-                                                     class="offer-form-input offer-form-input-with-prefix"
-                                                     @bind-Value="EditFormModel.PricePerHour" />
-                                    </div>
-                                    <ValidationMessage For="@(() => EditFormModel.PricePerHour)" />
-                                </div>
-
-                                <div class="offer-form-field">
-                                    <label for="edit-expiresOn">Verfügbar bis</label>
-                                    <InputDate id="edit-expiresOn"
-                                               class="offer-form-input"
-                                               @bind-Value="EditFormModel.ExpiresOn" />
-                                    <ValidationMessage For="@(() => EditFormModel.ExpiresOn)" />
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-
-                    <ValidationSummary class="tutor-edit-validation" />
-
-                    <div class="tutor-edit-mobile-actions">
-                        <button type="submit"
-                                class="tutor-edit-mobile-save"
-                                aria-label="Speichern">
-                            Speichern
-                        </button>
-                    </div>
-                </EditForm>
-            </section>
-        </div>
-    }
 </section>
 
 @code {
@@ -567,11 +388,7 @@
 
     private ElementReference TutorModalRef;
 
-    private ElementReference EditModalRef;
-
     private bool ShouldFocusTutorModal { get; set; }
-
-    private bool ShouldFocusEditModal { get; set; }
 
     private bool IsDescriptionExpanded { get; set; }
 
@@ -579,17 +396,7 @@
 
     private string DirectoryMessage { get; set; } = string.Empty;
 
-    private bool LoadedFromApi { get; set; }
-
-    private bool IsEditModalOpen { get; set; }
-
     private IReadOnlyList<TutorOffer> AllTutors { get; set; } = [];
-
-    private TutorOffer? EditingTutor { get; set; }
-
-    private TutorOfferFormModel EditFormModel { get; set; } = new();
-
-    private string EditSubjectInput { get; set; } = string.Empty;
 
     private bool IsSortDescending => SelectedSortDirection == SortDirectionDescending;
 
@@ -599,29 +406,6 @@
         AllTutors.SelectMany(t => t.Subjects)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(subject => subject);
-
-    private IEnumerable<string> EditableSubjects =>
-        AllTutors.SelectMany(t => t.Subjects)
-            .Concat(TutorOfferStore.GetCurrentTutorOffer().Subjects)
-            .Concat(["Deutsch", "Ethik", "INSY", "MEDT", "NWT", "SEW", "Sport"])
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(subject => subject);
-
-    private static readonly Dictionary<string, string> SubjectAliases = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Deutsch"] = "Deutsch",
-        ["Ethik"] = "Ethik",
-        ["Informatiksysteme"] = "INSY",
-        ["INSY"] = "INSY",
-        ["Medientechnik"] = "MEDT",
-        ["MEDT"] = "MEDT",
-        ["Naturwissenschaften"] = "NWT",
-        ["NWT"] = "NWT",
-        ["Softwareentwicklung"] = "SEW",
-        ["Software-Entwicklung"] = "SEW",
-        ["SEW"] = "SEW",
-        ["Sport"] = "Sport"
-    };
 
     private List<TutorOffer> FilteredTutors =>
         ApplySorting(
@@ -646,12 +430,6 @@
         var directoryResult = await TutorDirectoryService.GetTutorsAsync();
         AllTutors = directoryResult.Tutors;
         DirectoryMessage = directoryResult.Message ?? string.Empty;
-        LoadedFromApi = directoryResult.LoadedFromApi;
-
-        if (LoadedFromApi)
-        {
-            SyncCurrentTutorOfferIntoDirectory(replaceExisting: false);
-        }
 
         IsLoading = false;
     }
@@ -684,105 +462,12 @@
         IsDescriptionExpanded = false;
     }
 
-    private void BeginEditingOffer(TutorOffer tutor)
-    {
-        EditingTutor = tutor;
-        EditFormModel = new TutorOfferFormModel
-        {
-            Description = tutor.Description,
-            PricePerHour = tutor.PricePerHour,
-            Subjects = [.. tutor.Subjects.Distinct(StringComparer.OrdinalIgnoreCase)],
-            ExpiresOn = tutor.ExpiresOn
-        };
-        EditSubjectInput = string.Empty;
-
-        CloseTutorDetails();
-        IsEditModalOpen = true;
-        ShouldFocusEditModal = true;
-    }
-
-    private void CloseEditModal()
-    {
-        IsEditModalOpen = false;
-        EditingTutor = null;
-        EditSubjectInput = string.Empty;
-        ShouldFocusEditModal = false;
-    }
-
-    private void AddEditSubject()
-    {
-        var normalizedSubject = NormalizeEditableSubject(EditSubjectInput);
-
-        if (string.IsNullOrWhiteSpace(normalizedSubject))
-        {
-            return;
-        }
-
-        if (!EditFormModel.Subjects.Contains(normalizedSubject, StringComparer.OrdinalIgnoreCase))
-        {
-            EditFormModel.Subjects.Add(normalizedSubject);
-        }
-
-        EditSubjectInput = string.Empty;
-    }
-
-    private void RemoveEditSubject(string subject)
-    {
-        EditFormModel.Subjects.RemoveAll(selectedSubject => string.Equals(selectedSubject, subject, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private void HandleEditSubjectInputKeyUp(KeyboardEventArgs args)
-    {
-        if (args.Key is "Enter" or "," or ";")
-        {
-            AddEditSubject();
-        }
-    }
-
-    private string NormalizeEditableSubject(string? subjectInput)
-    {
-        var trimmedInput = subjectInput?.Trim();
-
-        if (string.IsNullOrWhiteSpace(trimmedInput))
-        {
-            return string.Empty;
-        }
-
-        if (SubjectAliases.TryGetValue(trimmedInput, out var aliasSubject))
-        {
-            return aliasSubject;
-        }
-
-        var existingSubject = EditableSubjects.FirstOrDefault(subject =>
-            string.Equals(subject, trimmedInput, StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrWhiteSpace(existingSubject))
-        {
-            return existingSubject;
-        }
-
-        return trimmedInput;
-    }
-
-    private void HandleEditSubmit()
-    {
-        TutorOfferStore.SaveCurrentTutorOffer(EditFormModel);
-        SyncCurrentTutorOfferIntoDirectory();
-        CloseEditModal();
-    }
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (ShouldFocusTutorModal && SelectedTutor is not null)
         {
             ShouldFocusTutorModal = false;
             await TutorModalRef.FocusAsync();
-        }
-
-        if (ShouldFocusEditModal && IsEditModalOpen)
-        {
-            ShouldFocusEditModal = false;
-            await EditModalRef.FocusAsync();
         }
     }
 
@@ -798,14 +483,7 @@
     {
         if (args.Key == "Escape")
         {
-            if (IsEditModalOpen)
-            {
-                CloseEditModal();
-            }
-            else
-            {
-                CloseTutorDetails();
-            }
+            CloseTutorDetails();
         }
     }
 
@@ -819,34 +497,9 @@
         RequestMessage = $"Die Anfrage an {SelectedTutor.Name} ist noch nicht aktiviert.";
     }
 
-    private bool IsOwnTutorOffer(TutorOffer? tutor)
-    {
-        return tutor is not null
-            && (string.Equals(tutor.Email, TutorOfferStore.CurrentTutor.Email, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(tutor.Name, TutorOfferStore.CurrentTutor.Name, StringComparison.OrdinalIgnoreCase));
-    }
-
     private void ToggleDescription()
     {
         IsDescriptionExpanded = !IsDescriptionExpanded;
-    }
-
-    private void SyncCurrentTutorOfferIntoDirectory(bool replaceExisting = true)
-    {
-        var currentTutorOffer = TutorOfferStore.GetCurrentTutorOffer();
-        var tutors = AllTutors.ToList();
-        var index = tutors.FindIndex(IsOwnTutorOffer);
-
-        if (index >= 0 && replaceExisting)
-        {
-            tutors[index] = currentTutorOffer;
-        }
-        else if (index < 0)
-        {
-            tutors.Add(currentTutorOffer);
-        }
-
-        AllTutors = tutors;
     }
 
     private static bool HasExpandableDescription(TutorOffer tutor)
@@ -877,6 +530,11 @@
         return !string.IsNullOrWhiteSpace(tutor.ImageUrl);
     }
 
+    private static bool HasTutorEmail(TutorOffer tutor)
+    {
+        return !string.IsNullOrWhiteSpace(tutor.Email);
+    }
+
     private static string GetPriceText(TutorOffer tutor)
     {
         return tutor.PricePerHour > 0
@@ -889,16 +547,6 @@
         return tutor.Age > 0
             ? $"{tutor.Age} Jahre"
             : "Nicht angegeben";
-    }
-
-    private static string GetClassOnly(string schoolInfo)
-    {
-        if (string.IsNullOrWhiteSpace(schoolInfo))
-        {
-            return string.Empty;
-        }
-
-        return schoolInfo.Split(',', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? schoolInfo;
     }
 
     private void ToggleMinRating(int rating)
