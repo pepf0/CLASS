@@ -1400,7 +1400,10 @@ h1:focus {
 }
 
 .profile-card,
-.offer-form-card {
+.offer-form-card,
+.profile-detail-panel,
+.profile-state-card,
+.auth-shell {
     border: 1px solid var(--surface-border);
     border-radius: 24px;
     background: var(--surface-card);
@@ -1418,6 +1421,25 @@ h1:focus {
     object-fit: cover;
     object-position: center 20%;
     background: var(--surface-hover);
+}
+
+.profile-avatar-placeholder {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 280px;
+    background: linear-gradient(135deg, rgba(0, 95, 163, 0.2), rgba(97, 0, 207, 0.24));
+    color: var(--color-heading-accent);
+    font-size: 4rem;
+    font-weight: 800;
+}
+
+.profile-avatar-placeholder-small {
+    width: 112px;
+    height: 112px;
+    border-radius: 20px;
+    flex: 0 0 auto;
+    font-size: 2rem;
 }
 
 .profile-card-content {
@@ -1452,9 +1474,254 @@ h1:focus {
     font-weight: 600;
 }
 
+.profile-detail-panel,
+.profile-state-card,
+.auth-shell {
+    padding: 1.4rem;
+    text-align: left;
+}
+
+.profile-detail-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.profile-detail-header h2 {
+    margin: 0;
+}
+
+.profile-id {
+    padding: 0.38rem 0.7rem;
+    border-radius: 999px;
+    background: var(--surface-chip);
+    border: 1px solid var(--border-chip);
+    color: var(--color-heading-accent);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.profile-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.profile-info-item {
+    min-height: 96px;
+    padding: 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 16px;
+    background: var(--surface-panel);
+}
+
+.profile-info-item-wide {
+    grid-column: 1 / -1;
+}
+
+.profile-info-item span {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.profile-info-item strong {
+    color: var(--color-text);
+    font-size: 1rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.profile-state-card {
+    max-width: 760px;
+}
+
+.profile-state-card h1 {
+    margin-bottom: 0.5rem;
+}
+
+.profile-state-card p {
+    color: var(--color-text-muted);
+}
+
+.profile-state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.1rem;
+}
+
 .offer-form-card {
     padding: 1.4rem;
     text-align: left;
+}
+
+.auth-page {
+    margin-top: 2rem;
+}
+
+.auth-shell {
+    max-width: 860px;
+    margin: 0 auto;
+}
+
+.auth-header {
+    margin-bottom: 1rem;
+}
+
+.auth-header h1 {
+    margin: 0;
+}
+
+.auth-mode-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding: 0.35rem;
+    margin-bottom: 1.2rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 16px;
+    background: var(--surface-panel);
+}
+
+.auth-mode-switch button {
+    min-height: 44px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.auth-mode-switch button.active {
+    background: var(--surface-card);
+    color: var(--color-heading-accent);
+    box-shadow: var(--shadow-card);
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.auth-message {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    background: rgba(0, 95, 163, 0.12);
+    border: 1px solid rgba(0, 95, 163, 0.24);
+    color: var(--color-text);
+}
+
+.auth-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.registration-progress {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.registration-progress div {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface-panel);
+    border: 1px solid var(--surface-border);
+}
+
+.registration-progress i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #005fa3, #6100cf);
+}
+
+.profile-upload-box {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 18px;
+    background: var(--surface-panel);
+}
+
+.profile-upload-box-crop {
+    align-items: flex-start;
+}
+
+.profile-upload-controls {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.image-crop-frame {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 2px solid var(--border-chip);
+    border-radius: 24px;
+    background: var(--surface-hover);
+}
+
+.image-crop-frame::after {
+    content: "";
+    position: absolute;
+    inset: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    border-radius: 18px;
+    pointer-events: none;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.14);
+}
+
+.image-crop-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform-origin: center;
+}
+
+.crop-controls {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 0.6rem 0.75rem;
+    align-items: center;
+    margin-top: 1rem;
+}
+
+.crop-controls label {
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.profile-upload-box label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--color-text-muted);
+    font-weight: 700;
+}
+
+.profile-upload-box p {
+    margin: 0.5rem 0 0;
+    color: var(--color-text-muted);
+    overflow-wrap: anywhere;
 }
 
 .offer-form-header {
@@ -2690,8 +2957,13 @@ a.dashboard-count-badge:focus-visible {
     }
 
     .profile-grid,
-    .offer-form-layout {
+    .offer-form-layout,
+    .profile-info-grid {
         grid-template-columns: 1fr;
+    }
+
+    .profile-info-item-wide {
+        grid-column: auto;
     }
 
     .tutor-filters {
@@ -2708,7 +2980,8 @@ a.dashboard-count-badge:focus-visible {
 }
 
 @media (max-width: 640px) {
-    .offer-form-header {
+    .offer-form-header,
+    .profile-detail-header {
         flex-direction: column;
     }
 
@@ -2723,6 +2996,30 @@ a.dashboard-count-badge:focus-visible {
     .offer-form-actions .btn-primary-custom {
         width: 100%;
         text-align: center;
+    }
+
+    .auth-actions {
+        justify-content: stretch;
+    }
+
+    .auth-actions .btn-primary-custom,
+    .auth-actions .btn-secondary-custom {
+        width: 100%;
+    }
+
+    .profile-upload-box {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .image-crop-frame {
+        width: min(260px, 100%);
+        height: auto;
+        aspect-ratio: 1;
+    }
+
+    .crop-controls {
+        grid-template-columns: 1fr;
     }
 
     .tutoring-header p {

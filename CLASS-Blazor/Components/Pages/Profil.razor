@@ -1,151 +1,150 @@
 @page "/profil"
-@inject TutorOfferStore TutorOfferStore
+@inject UserSessionService UserSessionService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Profil</PageTitle>
 
-<section class="profile-page page-with-footer-space">
-    <div class="profile-header">
-        <div>
-            <p class="profile-kicker">Testkonto aktiv</p>
-            <h1>Profil</h1>
-            <p class="profile-subtitle">Fürs Testen ist standardmäßig Dominik Kautz eingeloggt. Seine Kontodaten werden direkt für neue Tutor-Angebote verwendet.</p>
+@if (IsLoading)
+{
+    <section class="profile-page page-with-footer-space">
+        <div class="profile-state-card">
+            <p class="profile-kicker">Profil</p>
+            <h1>Profil wird geladen</h1>
         </div>
-    </div>
-
-    <div class="profile-grid">
-        <aside class="profile-card">
-            <img src="@CurrentTutor.ImageUrl" alt="@CurrentTutor.Name" class="profile-avatar" />
-            <div class="profile-card-content">
-                <h2>@CurrentTutor.Name</h2>
-                <p>@CurrentTutor.SchoolInfo</p>
-                <a href="mailto:@CurrentTutor.Email">@CurrentTutor.Email</a>
-                <div class="profile-meta">
-                    <span>@CurrentTutor.Age Jahre</span>
-                    <span>Bereits als Tutor hinterlegt</span>
-                </div>
+    </section>
+}
+else if (CurrentUser is not null)
+{
+    <section class="profile-page page-with-footer-space">
+        <div class="profile-header">
+            <div>
+                <p class="profile-kicker">Angemeldet</p>
+                <h1>Profil</h1>
+                <p class="profile-subtitle">Deine Kontodaten und sichtbaren Profilinformationen.</p>
             </div>
-        </aside>
+        </div>
 
-        <section class="offer-form-card" aria-labelledby="offer-form-heading">
-            <div class="offer-form-header">
-                <div>
-                    <p class="profile-kicker">Tutor-Angebot</p>
-                    <h2 id="offer-form-heading">Angebot erstellen oder aktualisieren</h2>
+        <div class="profile-grid">
+            <aside class="profile-card">
+                @if (!string.IsNullOrWhiteSpace(UserSessionService.ProfileImageDataUrl))
+                {
+                    <img src="@UserSessionService.ProfileImageDataUrl" alt="@CurrentUser.FullName" class="profile-avatar" />
+                }
+                else
+                {
+                    <div class="profile-avatar-placeholder" aria-label="Profilbild Platzhalter">
+                        <span>@GetInitials(CurrentUser)</span>
+                    </div>
+                }
+                <div class="profile-card-content">
+                    <h2>@CurrentUser.FullName</h2>
+                    <p>@GetSchoolLine(CurrentUser)</p>
+                    <a href="mailto:@CurrentUser.Email">@CurrentUser.Email</a>
+                    <div class="profile-meta">
+                        <span>@CurrentUser.StarRating.ToString("0.0") Sterne</span>
+                        <span>@CurrentUser.Rating / 100 Punkte</span>
+                    </div>
                 </div>
-                <a href="/nachhilfe" class="btn-secondary-custom">Angebote ansehen</a>
+            </aside>
+
+            <section class="profile-detail-panel" aria-labelledby="profile-detail-heading">
+                <div class="profile-detail-header">
+                    <div>
+                        <p class="profile-kicker">Profilinfos</p>
+                        <h2 id="profile-detail-heading">Öffentliche Angaben</h2>
+                    </div>
+                    <span class="profile-id">ID @CurrentUser.Uid</span>
+                </div>
+
+                <div class="profile-info-grid">
+                    <div class="profile-info-item">
+                        <span>Vorname</span>
+                        <strong>@CurrentUser.FirstName</strong>
+                    </div>
+                    <div class="profile-info-item">
+                        <span>Nachname</span>
+                        <strong>@CurrentUser.LastName</strong>
+                    </div>
+                    <div class="profile-info-item">
+                        <span>Klasse</span>
+                        <strong>@GetValueOrPlaceholder(CurrentUser.Grade)</strong>
+                    </div>
+                    <div class="profile-info-item">
+                        <span>Schultyp</span>
+                        <strong>@GetValueOrPlaceholder(CurrentUser.SchoolType)</strong>
+                    </div>
+                    <div class="profile-info-item profile-info-item-wide">
+                        <span>Beschreibung</span>
+                        <strong>@GetDescription(CurrentUser.Description)</strong>
+                    </div>
+                    <div class="profile-info-item profile-info-item-wide">
+                        <span>Profilbild</span>
+                        <strong>@(string.IsNullOrWhiteSpace(UserSessionService.ProfileImageDataUrl) ? "Noch nicht in der Datenbank verfügbar" : "Für diese Sitzung gespeichert")</strong>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </section>
+}
+else
+{
+    <section class="profile-page page-with-footer-space">
+        <div class="profile-state-card">
+            <p class="profile-kicker">Nicht angemeldet</p>
+            <h1>Login erforderlich</h1>
+            <p>Bitte melde dich an oder erstelle ein Konto, um dein Profil zu sehen.</p>
+            <div class="profile-state-actions">
+                <a class="btn-primary-custom" href="/login?returnUrl=/profil">Login / Registrieren</a>
             </div>
-
-            @if (!string.IsNullOrWhiteSpace(SaveMessage))
-            {
-                <p class="offer-form-success">@SaveMessage</p>
-            }
-
-            <EditForm Model="FormModel" OnValidSubmit="HandleValidSubmit" class="offer-form">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
-
-                <div class="offer-form-layout">
-                    <div class="offer-form-field offer-form-field-full">
-                        <label for="description">Beschreibung</label>
-                        <InputTextArea id="description"
-                                       class="offer-form-input offer-form-textarea"
-                                       @bind-Value="FormModel.Description" />
-                        <ValidationMessage For="@(() => FormModel.Description)" />
-                    </div>
-
-                    <div class="offer-form-field offer-form-field-full">
-                        <label>Fächer</label>
-                        <div class="subject-selection-grid">
-                            @foreach (var subject in AvailableSubjects)
-                            {
-                                var isChecked = FormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase);
-
-                                <label class="subject-selection-chip">
-                                    <input type="checkbox"
-                                           checked="@isChecked"
-                                           @onchange="args => ToggleSubject(subject, args.Value is bool value && value)" />
-                                    <span>@subject</span>
-                                </label>
-                            }
-                        </div>
-                        <ValidationMessage For="@(() => FormModel.Subjects)" />
-                    </div>
-
-                    <div class="offer-form-field">
-                        <label for="price">Preis pro Stunde</label>
-                        <InputNumber id="price"
-                                     class="offer-form-input"
-                                     @bind-Value="FormModel.PricePerHour" />
-                        <ValidationMessage For="@(() => FormModel.PricePerHour)" />
-                    </div>
-
-                    <div class="offer-form-field">
-                        <label for="expiresOn">Gültig bis</label>
-                        <InputDate id="expiresOn"
-                                   class="offer-form-input"
-                                   @bind-Value="FormModel.ExpiresOn" />
-                        <ValidationMessage For="@(() => FormModel.ExpiresOn)" />
-                    </div>
-                </div>
-
-                <div class="offer-form-actions">
-                    <button type="submit" class="btn-primary-custom">Angebot speichern</button>
-                </div>
-            </EditForm>
-        </section>
-    </div>
-</section>
+        </div>
+    </section>
+}
 
 @code {
-    private static readonly string[] AvailableSubjects =
-    [
-        "Deutsch",
-        "Ethik",
-        "INSY",
-        "MEDT",
-        "NWT",
-        "SEW",
-        "Sport"
-    ];
+    private bool IsLoading = true;
+    private UserProfile? CurrentUser;
 
-    private TutorOfferFormModel FormModel { get; set; } = new();
-
-    private string SaveMessage { get; set; } = string.Empty;
-
-    private TutorAccount CurrentTutor => TutorOfferStore.CurrentTutor;
-
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        var currentOffer = TutorOfferStore.GetCurrentTutorOffer();
-        FormModel = new TutorOfferFormModel
+        await Task.CompletedTask;
+
+        IsLoading = false;
+        CurrentUser = UserSessionService.CurrentUser;
+
+        if (CurrentUser is null)
         {
-            Description = currentOffer.Description,
-            PricePerHour = currentOffer.PricePerHour,
-            Subjects = [.. currentOffer.Subjects],
-            ExpiresOn = currentOffer.ExpiresOn
-        };
-    }
-
-    private void ToggleSubject(string subject, bool isSelected)
-    {
-        SaveMessage = string.Empty;
-
-        if (isSelected)
-        {
-            if (!FormModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase))
-            {
-                FormModel.Subjects.Add(subject);
-            }
-
-            return;
+            NavigationManager.NavigateTo("/login?returnUrl=/profil", replace: true);
         }
-
-        FormModel.Subjects.RemoveAll(selectedSubject => string.Equals(selectedSubject, subject, StringComparison.OrdinalIgnoreCase));
     }
 
-    private void HandleValidSubmit()
+    private static string GetSchoolLine(UserProfile user)
     {
-        TutorOfferStore.SaveCurrentTutorOffer(FormModel);
-        SaveMessage = "Das Tutor-Angebot von Dominik Kautz wurde gespeichert und ist auf der Nachhilfe-Seite sofort sichtbar.";
+        var parts = new[] { user.Grade, user.SchoolType }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part.Trim());
+
+        var value = string.Join(", ", parts);
+        return string.IsNullOrWhiteSpace(value) ? "CLASS Profil" : value;
+    }
+
+    private static string GetValueOrPlaceholder(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "Noch nicht angegeben" : value.Trim();
+    }
+
+    private static string GetDescription(string description)
+    {
+        return string.IsNullOrWhiteSpace(description)
+            ? "Noch keine Beschreibung hinterlegt."
+            : description.Trim();
+    }
+
+    private static string GetInitials(UserProfile user)
+    {
+        var first = string.IsNullOrWhiteSpace(user.FirstName) ? string.Empty : user.FirstName.Trim()[0].ToString();
+        var last = string.IsNullOrWhiteSpace(user.LastName) ? string.Empty : user.LastName.Trim()[0].ToString();
+        var initials = $"{first}{last}".ToUpperInvariant();
+
+        return string.IsNullOrWhiteSpace(initials) ? "CL" : initials;
     }
 }

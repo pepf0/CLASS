@@ -1,0 +1,412 @@
+@page "/login"
+@inject NavigationManager NavigationManager
+@inject UserProfileService UserProfileService
+@inject UserSessionService UserSessionService
+@inject IJSRuntime JS
+
+<PageTitle>Login / Registrieren</PageTitle>
+
+<section class="auth-page page-with-footer-space">
+    <div class="auth-shell">
+        <div class="auth-header">
+            <p class="profile-kicker">CLASS Konto</p>
+            <h1>Login / Registrieren</h1>
+        </div>
+
+        <div class="auth-mode-switch" role="tablist" aria-label="Login oder Registrierung auswählen">
+            <button type="button"
+                    class="@(Mode == AuthMode.Login ? "active" : string.Empty)"
+                    @onclick="() => SetMode(AuthMode.Login)"
+                    role="tab"
+                    aria-selected="@(Mode == AuthMode.Login)">
+                Login
+            </button>
+            <button type="button"
+                    class="@(Mode == AuthMode.Register ? "active" : string.Empty)"
+                    @onclick="() => SetMode(AuthMode.Register)"
+                    role="tab"
+                    aria-selected="@(Mode == AuthMode.Register)">
+                Registrieren
+            </button>
+        </div>
+
+        @if (Mode == AuthMode.Login)
+        {
+            <EditForm Model="LoginModel" OnValidSubmit="HandleLoginAsync" class="auth-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="offer-form-field">
+                    <label for="login-email">E-Mail</label>
+                    <InputText id="login-email" class="offer-form-input" type="email" @bind-Value="LoginModel.Email" />
+                    <ValidationMessage For="@(() => LoginModel.Email)" />
+                </div>
+
+                <div class="offer-form-field">
+                    <label for="login-password">Passwort</label>
+                    <InputText id="login-password" class="offer-form-input" type="password" @bind-Value="LoginModel.Password" />
+                    <ValidationMessage For="@(() => LoginModel.Password)" />
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(AuthMessage))
+                {
+                    <p class="auth-message">@AuthMessage</p>
+                }
+
+                <button type="submit" class="btn-primary-custom">Einloggen</button>
+            </EditForm>
+        }
+        else
+        {
+            <div class="registration-progress" aria-label="Registrierungsfortschritt">
+                <span>@(RegistrationStep + 1) / @RegistrationSteps.Length</span>
+                <div>
+                    <i style="width: @RegistrationProgress"></i>
+                </div>
+            </div>
+
+            <EditForm EditContext="RegistrationEditContext" OnSubmit="HandleRegisterSubmitAsync" class="auth-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                @if (RegistrationStep == 0)
+                {
+                    <div class="offer-form-layout">
+                        <div class="offer-form-field">
+                            <label for="register-first-name">Vorname</label>
+                            <InputText id="register-first-name" class="offer-form-input" @bind-Value="RegistrationModel.FirstName" />
+                            <ValidationMessage For="@(() => RegistrationModel.FirstName)" />
+                        </div>
+                        <div class="offer-form-field">
+                            <label for="register-last-name">Nachname</label>
+                            <InputText id="register-last-name" class="offer-form-input" @bind-Value="RegistrationModel.LastName" />
+                            <ValidationMessage For="@(() => RegistrationModel.LastName)" />
+                        </div>
+                        <div class="offer-form-field offer-form-field-full">
+                            <label for="register-email">E-Mail</label>
+                            <InputText id="register-email" class="offer-form-input" type="email" @bind-Value="RegistrationModel.Email" />
+                            <ValidationMessage For="@(() => RegistrationModel.Email)" />
+                        </div>
+                        <div class="offer-form-field offer-form-field-full">
+                            <label for="register-password">Passwort</label>
+                            <InputText id="register-password" class="offer-form-input" type="password" @bind-Value="RegistrationModel.Password" />
+                            <ValidationMessage For="@(() => RegistrationModel.Password)" />
+                        </div>
+                    </div>
+                }
+                else if (RegistrationStep == 1)
+                {
+                    <div class="offer-form-layout">
+                        <div class="offer-form-field">
+                            <label for="register-grade">Klasse</label>
+                            <InputText id="register-grade" class="offer-form-input" placeholder="z. B. 3BHIT" @bind-Value="RegistrationModel.Grade" />
+                            <ValidationMessage For="@(() => RegistrationModel.Grade)" />
+                        </div>
+                        <div class="offer-form-field">
+                            <label for="register-school-type">Schultyp</label>
+                            <InputSelect id="register-school-type" class="offer-form-input" @bind-Value="RegistrationModel.SchoolType">
+                                <option value="">Bitte wählen</option>
+                                <option>Tagesschule</option>
+                                <option>Abendschule</option>
+                            </InputSelect>
+                            <ValidationMessage For="@(() => RegistrationModel.SchoolType)" />
+                        </div>
+                        <div class="offer-form-field offer-form-field-full">
+                            <label for="register-birth-date">Geburtsdatum</label>
+                            <InputDate id="register-birth-date" class="offer-form-input" @bind-Value="RegistrationModel.BirthDate" />
+                            <ValidationMessage For="@(() => RegistrationModel.BirthDate)" />
+                        </div>
+                        <div class="offer-form-field offer-form-field-full">
+                            <label for="register-description">Beschreibung</label>
+                            <InputTextArea id="register-description" class="offer-form-input offer-form-textarea" @bind-Value="RegistrationModel.Description" />
+                            <ValidationMessage For="@(() => RegistrationModel.Description)" />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="profile-upload-box profile-upload-box-crop">
+                        @if (!string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl))
+                        {
+                            <div class="image-crop-frame">
+                                <img src="@RegistrationModel.ProfileImageDataUrl"
+                                     alt=""
+                                     style="transform: translate(@ImageOffsetXpx, @ImageOffsetYpx) scale(@ImageZoomValue);" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="profile-avatar-placeholder profile-avatar-placeholder-small">
+                                <span>@GetRegistrationInitials()</span>
+                            </div>
+                        }
+                        <div class="profile-upload-controls">
+                            <label for="register-image">Profilbild</label>
+                            <InputFile id="register-image" OnChange="HandleProfileImageSelectedAsync" accept="image/*" />
+                            <ValidationMessage For="@(() => RegistrationModel.ProfileImageName)" />
+                            <p>@(string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageName) ? "Noch kein Bild ausgewählt" : RegistrationModel.ProfileImageName)</p>
+
+                            @if (!string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl))
+                            {
+                                <div class="crop-controls">
+                                    <label for="crop-zoom">Zoom</label>
+                                    <InputNumber id="crop-zoom" class="offer-form-input" min="1" max="3" step="0.1" @bind-Value="ImageZoom" />
+                                    <label for="crop-x">Horizontal</label>
+                                    <InputNumber id="crop-x" class="offer-form-input" min="-100" max="100" step="1" @bind-Value="ImageOffsetX" />
+                                    <label for="crop-y">Vertikal</label>
+                                    <InputNumber id="crop-y" class="offer-form-input" min="-100" max="100" step="1" @bind-Value="ImageOffsetY" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(AuthMessage))
+                {
+                    <p class="auth-message">@AuthMessage</p>
+                }
+
+                <div class="auth-actions">
+                    @if (RegistrationStep > 0)
+                    {
+                        <button type="button" class="btn-secondary-custom" @onclick="PreviousRegistrationStep">Zurück</button>
+                    }
+                    <button type="submit" class="btn-primary-custom">@GetRegisterButtonText()</button>
+                </div>
+            </EditForm>
+        }
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [Parameter]
+    public string InitialMode { get; set; } = "login";
+
+    private enum AuthMode
+    {
+        Login,
+        Register
+    }
+
+    private static readonly string[] RegistrationSteps = ["Konto", "Schule", "Bild"];
+
+    private LoginFormModel LoginModel { get; set; } = new();
+
+    private RegistrationFormModel RegistrationModel { get; set; } = new();
+
+    private EditContext RegistrationEditContext { get; set; } = default!;
+
+    private ValidationMessageStore RegistrationValidationMessages { get; set; } = default!;
+
+    private AuthMode Mode { get; set; }
+
+    private int RegistrationStep { get; set; }
+
+    private string AuthMessage { get; set; } = string.Empty;
+
+    private string RegistrationProgress => $"{((RegistrationStep + 1) * 100) / RegistrationSteps.Length}%";
+
+    private double ImageZoom { get; set; } = 1.2;
+
+    private int ImageOffsetX { get; set; }
+
+    private int ImageOffsetY { get; set; }
+
+    private string ImageZoomValue => ImageZoom.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private string ImageOffsetXpx => $"{ImageOffsetX}px";
+
+    private string ImageOffsetYpx => $"{ImageOffsetY}px";
+
+    protected override void OnParametersSet()
+    {
+        if (RegistrationEditContext is null)
+        {
+            RegistrationEditContext = new EditContext(RegistrationModel);
+            RegistrationValidationMessages = new ValidationMessageStore(RegistrationEditContext);
+        }
+
+        Mode = string.Equals(InitialMode, "register", StringComparison.OrdinalIgnoreCase)
+            ? AuthMode.Register
+            : AuthMode.Login;
+    }
+
+    private void SetMode(AuthMode mode)
+    {
+        Mode = mode;
+        AuthMessage = string.Empty;
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        AuthMessage = string.Empty;
+        var result = await UserProfileService.LoginAsync(LoginModel.Email);
+
+        if (result.IsAuthenticated && result.User is not null)
+        {
+            UserSessionService.SignIn(result.User);
+            NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
+            return;
+        }
+
+        AuthMessage = result.ErrorMessage ?? "Login fehlgeschlagen.";
+    }
+
+    private async Task HandleRegisterSubmitAsync(EditContext editContext)
+    {
+        if (!ValidateRegistrationStep())
+        {
+            return;
+        }
+
+        if (RegistrationStep < RegistrationSteps.Length - 1)
+        {
+            RegistrationStep++;
+            AuthMessage = string.Empty;
+            return;
+        }
+
+        RegistrationModel.CroppedProfileImageDataUrl = await CropProfileImageAsync();
+        var result = await UserProfileService.RegisterAsync(RegistrationModel);
+
+        if (result.IsAuthenticated && result.User is not null)
+        {
+            UserSessionService.SignIn(result.User, RegistrationModel.CroppedProfileImageDataUrl);
+            NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
+            return;
+        }
+
+        AuthMessage = result.ErrorMessage ?? "Registrierung fehlgeschlagen.";
+    }
+
+    private void PreviousRegistrationStep()
+    {
+        RegistrationStep = Math.Max(0, RegistrationStep - 1);
+        AuthMessage = string.Empty;
+    }
+
+    private async Task HandleProfileImageSelectedAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        RegistrationModel.ProfileImageName = file.Name;
+        RegistrationModel.ProfileImageDataUrl = await ReadImageDataUrlAsync(file);
+        ImageZoom = 1.2;
+        ImageOffsetX = 0;
+        ImageOffsetY = 0;
+        AuthMessage = string.Empty;
+    }
+
+    private string GetRegisterButtonText()
+    {
+        return RegistrationStep == RegistrationSteps.Length - 1 ? "Registrierung abschließen" : "Weiter";
+    }
+
+    private string GetRegistrationInitials()
+    {
+        var first = string.IsNullOrWhiteSpace(RegistrationModel.FirstName) ? string.Empty : RegistrationModel.FirstName.Trim()[0].ToString();
+        var last = string.IsNullOrWhiteSpace(RegistrationModel.LastName) ? string.Empty : RegistrationModel.LastName.Trim()[0].ToString();
+        var initials = $"{first}{last}".ToUpperInvariant();
+
+        return string.IsNullOrWhiteSpace(initials) ? "CL" : initials;
+    }
+
+    private bool ValidateRegistrationStep()
+    {
+        RegistrationValidationMessages.Clear();
+
+        string[] fields = RegistrationStep switch
+        {
+            0 =>
+            [
+                nameof(RegistrationFormModel.FirstName),
+                nameof(RegistrationFormModel.LastName),
+                nameof(RegistrationFormModel.Email),
+                nameof(RegistrationFormModel.Password)
+            ],
+            1 =>
+            [
+                nameof(RegistrationFormModel.Grade),
+                nameof(RegistrationFormModel.SchoolType),
+                nameof(RegistrationFormModel.BirthDate),
+                nameof(RegistrationFormModel.Description)
+            ],
+            _ => [nameof(RegistrationFormModel.ProfileImageName)]
+        };
+
+        foreach (var field in fields)
+        {
+            ValidateRegistrationField(field);
+        }
+
+        if (RegistrationStep == 2 && string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageName))
+        {
+            RegistrationValidationMessages.Add(
+                RegistrationEditContext.Field(nameof(RegistrationFormModel.ProfileImageName)),
+                "Bitte wähle ein Profilbild aus.");
+        }
+
+        RegistrationEditContext.NotifyValidationStateChanged();
+
+        return !fields.Any(field => RegistrationEditContext.GetValidationMessages(RegistrationEditContext.Field(field)).Any());
+    }
+
+    private void ValidateRegistrationField(string fieldName)
+    {
+        var property = typeof(RegistrationFormModel).GetProperty(fieldName);
+
+        if (property is null)
+        {
+            return;
+        }
+
+        var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(RegistrationModel)
+        {
+            MemberName = fieldName
+        };
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+
+        System.ComponentModel.DataAnnotations.Validator.TryValidateProperty(
+            property.GetValue(RegistrationModel),
+            validationContext,
+            results);
+
+        foreach (var result in results)
+        {
+            RegistrationValidationMessages.Add(RegistrationEditContext.Field(fieldName), result.ErrorMessage ?? "Ungültige Eingabe.");
+        }
+    }
+
+    private string GetReturnUrl()
+    {
+        return string.IsNullOrWhiteSpace(ReturnUrl) ? "/profil" : ReturnUrl;
+    }
+
+    private static async Task<string> ReadImageDataUrlAsync(IBrowserFile file)
+    {
+        const long maxFileSize = 5 * 1024 * 1024;
+        await using var stream = file.OpenReadStream(maxFileSize);
+        using var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream);
+
+        return $"data:{file.ContentType};base64,{Convert.ToBase64String(memoryStream.ToArray())}";
+    }
+
+    private async Task<string> CropProfileImageAsync()
+    {
+        if (string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl))
+        {
+            return string.Empty;
+        }
+
+        return await JS.InvokeAsync<string>(
+            "profileImageCropper.crop",
+            RegistrationModel.ProfileImageDataUrl,
+            ImageZoom,
+            ImageOffsetX,
+            ImageOffsetY,
+            512);
+    }
+}

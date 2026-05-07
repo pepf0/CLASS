@@ -10,26 +10,11 @@ public sealed class ClassOfferApiResponse
 
 public sealed class ClassOfferDto
 {
-    [JsonPropertyName("first_name")]
-    public string FirstName { get; set; } = string.Empty;
+    [JsonPropertyName("oid")]
+    public int Oid { get; set; }
 
-    [JsonPropertyName("last_name")]
-    public string LastName { get; set; } = string.Empty;
-
-    [JsonPropertyName("email")]
-    public string Email { get; set; } = string.Empty;
-
-    [JsonPropertyName("grade")]
-    public string Grade { get; set; } = string.Empty;
-
-    [JsonPropertyName("school_type")]
-    public string SchoolType { get; set; } = string.Empty;
-
-    [JsonPropertyName("birth_date")]
-    public DateTimeOffset? BirthDate { get; set; }
-
-    [JsonPropertyName("rating")]
-    public int Rating { get; set; }
+    [JsonPropertyName("offerer_uid")]
+    public int OffererUid { get; set; }
 
     [JsonPropertyName("min_price")]
     public int MinPrice { get; set; }
@@ -40,9 +25,6 @@ public sealed class ClassOfferDto
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
-    [JsonPropertyName("subject_list")]
-    public string SubjectList { get; set; } = string.Empty;
-
-    [JsonPropertyName("image_url")]
-    public string ImageUrl { get; set; } = string.Empty;
+    [JsonPropertyName("subject_ids")]
+    public string SubjectIds { get; set; } = string.Empty;
 }

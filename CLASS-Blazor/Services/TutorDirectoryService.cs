@@ -8,13 +8,24 @@ public sealed class TutorDirectoryService(
     ILogger<TutorDirectoryService> logger)
 {
     private const string TutorApiUrl = "https://pepf.net/api/class/offer";
+    private const string UserApiUrl = "https://pepf.net/api/class/user";
+    private const string SubjectApiUrl = "https://pepf.net/api/class/subject";
+
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     public async Task<TutorDirectoryResult> GetTutorsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var json = await httpClient.GetStringAsync(TutorApiUrl, cancellationToken);
-            var apiOffers = ParseApiOffers(json);
+            var offersJson = await httpClient.GetStringAsync(TutorApiUrl, cancellationToken);
+            var usersJson = await httpClient.GetStringAsync(UserApiUrl, cancellationToken);
+            var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
+            var apiOffers = ParseApiOffers(offersJson);
+            var usersById = ParseUsers(usersJson).ToDictionary(user => user.Uid);
+            var subjectsById = ParseSubjects(subjectsJson).ToDictionary(subject => subject.Suid);
 
             if (apiOffers.Count == 0)
             {
@@ -25,7 +36,7 @@ public sealed class TutorDirectoryService(
             }
 
             return new TutorDirectoryResult(
-                BuildTutorsFromApi(apiOffers),
+                BuildTutorsFromApi(apiOffers, usersById, subjectsById),
                 LoadedFromApi: true,
                 Message: $"{apiOffers.Count} Nachhilfeangebote wurden aus der API geladen.");
         }
@@ -42,47 +53,83 @@ public sealed class TutorDirectoryService(
 
     private static List<ClassOfferDto> ParseApiOffers(string json)
     {
-        var serializerOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
         using var document = JsonDocument.Parse(json);
 
         if (document.RootElement.ValueKind == JsonValueKind.Array)
         {
-            return JsonSerializer.Deserialize<List<ClassOfferDto>>(json, serializerOptions) ?? [];
+            return JsonSerializer.Deserialize<List<ClassOfferDto>>(json, SerializerOptions) ?? [];
         }
 
         if (document.RootElement.ValueKind == JsonValueKind.Object
             && document.RootElement.TryGetProperty("value", out var valueElement)
             && valueElement.ValueKind == JsonValueKind.Array)
         {
-            return JsonSerializer.Deserialize<List<ClassOfferDto>>(valueElement.GetRawText(), serializerOptions) ?? [];
+            return JsonSerializer.Deserialize<List<ClassOfferDto>>(valueElement.GetRawText(), SerializerOptions) ?? [];
         }
 
         return [];
     }
 
-    private static IReadOnlyList<TutorOffer> BuildTutorsFromApi(IEnumerable<ClassOfferDto> apiOffers)
+    private static List<UserProfile> ParseUsers(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<UserProfile>>(json, SerializerOptions) ?? [];
+        }
+
+        if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("value", out var valueElement)
+            && valueElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<UserProfile>>(valueElement.GetRawText(), SerializerOptions) ?? [];
+        }
+
+        return [];
+    }
+
+    private static List<SubjectDto> ParseSubjects(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<SubjectDto>>(json, SerializerOptions) ?? [];
+        }
+
+        if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("value", out var valueElement)
+            && valueElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<SubjectDto>>(valueElement.GetRawText(), SerializerOptions) ?? [];
+        }
+
+        return [];
+    }
+
+    private static IReadOnlyList<TutorOffer> BuildTutorsFromApi(
+        IEnumerable<ClassOfferDto> apiOffers,
+        IReadOnlyDictionary<int, UserProfile> usersById,
+        IReadOnlyDictionary<int, SubjectDto> subjectsById)
     {
         return apiOffers
             .Select(apiOffer =>
             {
-                var fullName = $"{apiOffer.FirstName} {apiOffer.LastName}".Trim();
+                usersById.TryGetValue(apiOffer.OffererUid, out var user);
 
                 return new TutorOffer(
-                    Name: fullName,
-                    Age: GetAge(apiOffer.BirthDate),
-                    Email: apiOffer.Email.Trim(),
+                    Name: user?.FullName ?? $"User {apiOffer.OffererUid}",
+                    Age: GetAge(user?.BirthDate),
+                    Email: user?.Email.Trim() ?? string.Empty,
                     Description: GetDescription(apiOffer),
-                    SchoolInfo: GetSchoolInfo(apiOffer),
-                    Subjects: GetSubjects(apiOffer.SubjectList),
-                    Rating: ConvertRating(apiOffer.Rating),
-                    ReviewCount: GetReviewCount(apiOffer.Rating),
+                    SchoolInfo: GetSchoolInfo(user),
+                    Subjects: GetSubjects(apiOffer.SubjectIds, subjectsById),
+                    Rating: ConvertRating(user?.Rating ?? 0),
+                    ReviewCount: GetReviewCount(user?.Rating ?? 0),
                     PricePerHour: Math.Max(0, apiOffer.MinPrice),
                     ExpiresOn: GetExpiryDate(apiOffer.Until),
-                    ImageUrl: apiOffer.ImageUrl.Trim());
+                    ImageUrl: string.Empty);
             })
             .Where(tutor => !string.IsNullOrWhiteSpace(tutor.Name))
             .ToList();
@@ -101,18 +148,18 @@ public sealed class TutorDirectoryService(
             : apiOffer.Description.Trim();
     }
 
-    private static string GetSchoolInfo(ClassOfferDto apiOffer)
+    private static string GetSchoolInfo(UserProfile? user)
     {
         var infoParts = new List<string>();
 
-        if (!string.IsNullOrWhiteSpace(apiOffer.Grade))
+        if (!string.IsNullOrWhiteSpace(user?.Grade))
         {
-            infoParts.Add(apiOffer.Grade.Trim());
+            infoParts.Add(user.Grade.Trim());
         }
 
-        if (!string.IsNullOrWhiteSpace(apiOffer.SchoolType))
+        if (!string.IsNullOrWhiteSpace(user?.SchoolType))
         {
-            infoParts.Add(apiOffer.SchoolType.Trim());
+            infoParts.Add(user.SchoolType.Trim());
         }
 
         return infoParts.Count > 0
@@ -120,17 +167,26 @@ public sealed class TutorDirectoryService(
             : "Tutor bei CLASS";
     }
 
-    private static string[] GetSubjects(string subjectList)
+    private static string[] GetSubjects(string subjectIds, IReadOnlyDictionary<int, SubjectDto> subjectsById)
     {
-        if (string.IsNullOrWhiteSpace(subjectList))
+        if (string.IsNullOrWhiteSpace(subjectIds))
         {
             return [];
         }
 
-        return subjectList
+        return subjectIds
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(subjectId => GetSubjectName(subjectId, subjectsById))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string GetSubjectName(string subjectId, IReadOnlyDictionary<int, SubjectDto> subjectsById)
+    {
+        return int.TryParse(subjectId, out var parsedSubjectId)
+               && subjectsById.TryGetValue(parsedSubjectId, out var subject)
+            ? subject.DisplayName
+            : $"Fach {subjectId}";
     }
 
     private static int GetAge(DateTimeOffset? birthDate)
