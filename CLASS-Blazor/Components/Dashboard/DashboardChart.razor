@@ -33,7 +33,7 @@
             var isEmpty = point.Value <= 0;
 
             <div class="dashboard-chart-column @(isEmpty ? "dashboard-chart-column-empty" : string.Empty)">
-                <span class="dashboard-chart-value">@(isEmpty ? "Keine Daten" : FormatValue(point.Value))</span>
+                <span class="dashboard-chart-value">@FormatValue(point.Value)</span>
                 <span class="dashboard-chart-track">
                     <span class="dashboard-chart-bar" style="@GetFillStyle(fillPercent)" aria-hidden="true"></span>
                 </span>
