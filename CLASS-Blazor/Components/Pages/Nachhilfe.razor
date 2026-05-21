@@ -1,5 +1,6 @@
 ﻿@page "/nachhilfe"
 @inject TutorDirectoryService TutorDirectoryService
+@inject UserSessionService UserSessionService
 
 <PageTitle>Nachhilfe</PageTitle>
 
@@ -139,6 +140,18 @@
                          @onclick="() => OpenTutorDetails(tutor)"
                          @onkeydown="@(args => HandleTutorCardKeyDown(args, tutor))"
                          aria-label="@($"Details zu {tutor.Name} anzeigen")">
+                    @if (IsOwnTutorOffer(tutor))
+                    {
+                        <button type="button"
+                                class="tutor-edit-button tutor-edit-button-card"
+                                title="Angebot bearbeiten"
+                                aria-label="Angebot von @tutor.Name bearbeiten"
+                                @onclick="() => OpenTutorEdit(tutor)"
+                                @onclick:stopPropagation="true">
+                            <span aria-hidden="true">&#9998;</span>
+                        </button>
+                    }
+
                     @if (HasTutorImage(tutor))
                     {
                         <img src="@tutor.ImageUrl" alt="Tutor @tutor.Name" class="tutor-image" />
@@ -220,6 +233,137 @@
                     <span aria-hidden="true">&times;</span>
                 </button>
 
+                @if (!IsEditingTutorOffer && IsOwnTutorOffer(SelectedTutor))
+                {
+                    <button type="button"
+                            class="tutor-edit-button tutor-edit-button-modal"
+                            title="Angebot bearbeiten"
+                            aria-label="Angebot bearbeiten"
+                            @onclick="StartEditingSelectedTutor">
+                        <span aria-hidden="true">&#9998;</span>
+                    </button>
+                }
+
+                @if (IsEditingTutorOffer)
+                {
+                    <EditForm Model="TutorEditModel" OnSubmit="SaveTutorEdit" class="tutor-edit-form">
+                        <div class="tutor-modal-header">
+                            @if (HasTutorImage(SelectedTutor))
+                            {
+                                <img src="@SelectedTutor.ImageUrl" alt="Tutor @SelectedTutor.Name" class="tutor-modal-image" />
+                            }
+                            else
+                            {
+                                <div class="tutor-modal-image tutor-image-placeholder tutor-modal-image-placeholder" role="img" aria-label="Kein Bild für @SelectedTutor.Name vorhanden">
+                                    <span class="tutor-image-placeholder-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" focusable="false">
+                                            <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-6 2.24-6 5v1h12v-1c0-2.76-2.69-5-6-5Z" />
+                                        </svg>
+                                    </span>
+                                    <span class="tutor-image-placeholder-text">Kein Bild vorhanden</span>
+                                </div>
+                            }
+
+                            <div class="tutor-modal-header-content">
+                                <div class="tutor-modal-intro">
+                                    <p class="tutor-modal-kicker">Tutorprofil</p>
+                                    <h2 id="tutor-modal-title">Angebot bearbeiten</h2>
+                                    <p class="tutor-edit-subtitle">Passe Preis, Fächer, Beschreibung und Gültigkeit deines sichtbaren Angebots an.</p>
+                                    <p class="tutor-modal-school">@SelectedTutor.Name · @SelectedTutor.SchoolInfo</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tutor-modal-body">
+                            <section class="tutor-modal-section tutor-edit-metrics-section">
+                                <div class="offer-form-layout">
+                                    <div class="offer-form-field">
+                                        <label for="tutor-edit-price">Preis pro Stunde</label>
+                                        <div class="offer-form-input-prefix-wrap">
+                                            <span class="offer-form-input-prefix">EUR</span>
+                                            <InputNumber id="tutor-edit-price"
+                                                         class="offer-form-input offer-form-input-with-prefix"
+                                                         min="5"
+                                                         max="100"
+                                                         @bind-Value="TutorEditModel.PricePerHour" />
+                                        </div>
+                                    </div>
+
+                                    <div class="offer-form-field">
+                                        <label for="tutor-edit-expires">Gültig bis</label>
+                                        <InputDate id="tutor-edit-expires"
+                                                   class="offer-form-input"
+                                                   @bind-Value="TutorEditModel.ExpiresOn" />
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="tutor-modal-section">
+                                <div class="offer-form-field">
+                                    <label for="tutor-edit-description">Beschreibung</label>
+                                    <InputTextArea id="tutor-edit-description"
+                                                   class="offer-form-input offer-form-textarea"
+                                                   @bind-Value="TutorEditModel.Description" />
+                                </div>
+                            </section>
+
+                            <section class="tutor-modal-section">
+                                <div class="offer-form-field">
+                                    <label for="tutor-edit-subject">Angebotene Fächer</label>
+                                    <div class="subject-selection-list">
+                                        @foreach (var subject in TutorEditModel.Subjects)
+                                        {
+                                            <button type="button"
+                                                    class="subject-selection-tag"
+                                                    title="@($"{subject} entfernen")"
+                                                    @onclick="() => RemoveTutorEditSubject(subject)">
+                                                <span class="subject-selection-tag-label">@subject</span>
+                                                <span class="subject-selection-tag-remove" aria-hidden="true">&times;</span>
+                                            </button>
+                                        }
+                                    </div>
+
+                                    <div class="subject-selection-input-row">
+                                        <input id="tutor-edit-subject"
+                                               class="offer-form-input"
+                                               placeholder="z. B. Mathematik"
+                                               @bind="TutorEditSubjectInput"
+                                               @bind:event="oninput" />
+                                        <button type="button"
+                                                class="subject-selection-add-button"
+                                                @onclick="AddTutorEditSubject">
+                                            Fach hinzufügen
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(TutorEditMessage))
+                        {
+                            <p class="offer-form-success">@TutorEditMessage</p>
+                        }
+
+                        @if (TutorEditValidationMessages.Count > 0)
+                        {
+                            <ul class="tutor-edit-validation">
+                                @foreach (var message in TutorEditValidationMessages)
+                                {
+                                    <li>@message</li>
+                                }
+                            </ul>
+                        }
+
+                        <div class="tutor-modal-actions">
+                            <div class="tutor-modal-cta tutor-edit-actions">
+                                <button type="button" class="btn-secondary-custom" @onclick="CancelTutorEdit">Abbrechen</button>
+                                <button type="submit" class="tutor-request-button tutor-edit-button-confirm">Speichern</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                }
+                else
+                {
                 <div class="tutor-modal-header">
                     @if (HasTutorImage(SelectedTutor))
                     {
@@ -346,6 +490,7 @@
                         <p class="tutor-request-hint">@RequestMessage</p>
                     }
                 </div>
+                }
             </section>
         </div>
     }
@@ -383,6 +528,16 @@
     private bool IsSortMenuOpen { get; set; }
 
     private TutorOffer? SelectedTutor { get; set; }
+
+    private bool IsEditingTutorOffer { get; set; }
+
+    private TutorOfferFormModel TutorEditModel { get; set; } = new();
+
+    private string TutorEditSubjectInput { get; set; } = string.Empty;
+
+    private string TutorEditMessage { get; set; } = string.Empty;
+
+    private List<string> TutorEditValidationMessages { get; set; } = [];
 
     private string RequestMessage { get; set; } = string.Empty;
 
@@ -450,14 +605,28 @@
     {
         SelectedTutor = tutor;
         RequestMessage = string.Empty;
+        IsEditingTutorOffer = false;
+        TutorEditMessage = string.Empty;
+        TutorEditValidationMessages.Clear();
         ShouldFocusTutorModal = true;
         IsDescriptionExpanded = false;
+    }
+
+    private void OpenTutorEdit(TutorOffer tutor)
+    {
+        SelectedTutor = tutor;
+        StartEditingSelectedTutor();
+        ShouldFocusTutorModal = true;
     }
 
     private void CloseTutorDetails()
     {
         SelectedTutor = null;
         RequestMessage = string.Empty;
+        IsEditingTutorOffer = false;
+        TutorEditMessage = string.Empty;
+        TutorEditSubjectInput = string.Empty;
+        TutorEditValidationMessages.Clear();
         ShouldFocusTutorModal = false;
         IsDescriptionExpanded = false;
     }
@@ -497,6 +666,108 @@
         RequestMessage = $"Die Anfrage an {SelectedTutor.Name} ist noch nicht aktiviert.";
     }
 
+    private void StartEditingSelectedTutor()
+    {
+        if (SelectedTutor is null || !IsOwnTutorOffer(SelectedTutor))
+        {
+            return;
+        }
+
+        TutorEditModel = new TutorOfferFormModel
+        {
+            Description = SelectedTutor.Description,
+            PricePerHour = SelectedTutor.PricePerHour <= 0 ? 15 : SelectedTutor.PricePerHour,
+            ExpiresOn = SelectedTutor.ExpiresOn,
+            Subjects = SelectedTutor.Subjects.ToList()
+        };
+        TutorEditSubjectInput = string.Empty;
+        TutorEditMessage = string.Empty;
+        TutorEditValidationMessages.Clear();
+        RequestMessage = string.Empty;
+        IsEditingTutorOffer = true;
+    }
+
+    private void CancelTutorEdit()
+    {
+        IsEditingTutorOffer = false;
+        TutorEditMessage = string.Empty;
+        TutorEditValidationMessages.Clear();
+    }
+
+    private void AddTutorEditSubject()
+    {
+        var subject = TutorEditSubjectInput.Trim();
+
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            return;
+        }
+
+        if (!TutorEditModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase))
+        {
+            TutorEditModel.Subjects.Add(subject);
+        }
+
+        TutorEditSubjectInput = string.Empty;
+    }
+
+    private void RemoveTutorEditSubject(string subject)
+    {
+        TutorEditModel.Subjects.RemoveAll(value => string.Equals(value, subject, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void SaveTutorEdit(EditContext editContext)
+    {
+        TutorEditValidationMessages = ValidateTutorEditModel().ToList();
+
+        if (SelectedTutor is null || TutorEditValidationMessages.Count > 0)
+        {
+            return;
+        }
+
+        var updatedTutor = SelectedTutor with
+        {
+            Description = TutorEditModel.Description.Trim(),
+            Subjects = TutorEditModel.Subjects
+                .Where(subject => !string.IsNullOrWhiteSpace(subject))
+                .Select(subject => subject.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            PricePerHour = TutorEditModel.PricePerHour,
+            ExpiresOn = TutorEditModel.ExpiresOn ?? SelectedTutor.ExpiresOn
+        };
+
+        AllTutors = AllTutors
+            .Select(tutor => IsSameTutorOffer(tutor, SelectedTutor) ? updatedTutor : tutor)
+            .ToList();
+        SelectedTutor = updatedTutor;
+        TutorEditMessage = "Dein Angebot wurde für diese Sitzung gespeichert.";
+        IsEditingTutorOffer = false;
+    }
+
+    private IEnumerable<string> ValidateTutorEditModel()
+    {
+        if (string.IsNullOrWhiteSpace(TutorEditModel.Description) || TutorEditModel.Description.Trim().Length < 24)
+        {
+            yield return "Die Beschreibung muss mindestens 24 Zeichen lang sein.";
+        }
+
+        if (TutorEditModel.PricePerHour is < 5 or > 100)
+        {
+            yield return "Bitte gib einen Preis zwischen 5 und 100 EUR an.";
+        }
+
+        if (TutorEditModel.Subjects.Count == 0)
+        {
+            yield return "Bitte gib mindestens ein Fach an.";
+        }
+
+        if (TutorEditModel.ExpiresOn.HasValue && TutorEditModel.ExpiresOn.Value < Today)
+        {
+            yield return "Das Gültigkeitsdatum darf nicht in der Vergangenheit liegen.";
+        }
+    }
+
     private void ToggleDescription()
     {
         IsDescriptionExpanded = !IsDescriptionExpanded;
@@ -533,6 +804,19 @@
     private static bool HasTutorEmail(TutorOffer tutor)
     {
         return !string.IsNullOrWhiteSpace(tutor.Email);
+    }
+
+    private bool IsOwnTutorOffer(TutorOffer tutor)
+    {
+        return UserSessionService.CurrentUser is not null
+            && !string.IsNullOrWhiteSpace(UserSessionService.CurrentUser.Email)
+            && string.Equals(tutor.Email, UserSessionService.CurrentUser.Email, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSameTutorOffer(TutorOffer left, TutorOffer right)
+    {
+        return string.Equals(left.Email, right.Email, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetPriceText(TutorOffer tutor)

@@ -16,6 +16,11 @@ public sealed class UserSessionService
         ProfileImageDataUrl = profileImageDataUrl;
     }
 
+    public void UpdateProfileImage(string profileImageDataUrl)
+    {
+        ProfileImageDataUrl = profileImageDataUrl;
+    }
+
     public void SignOut()
     {
         CurrentUser = null;

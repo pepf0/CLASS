@@ -1,5 +1,6 @@
 @page "/profil"
 @inject UserSessionService UserSessionService
+@inject TutorDirectoryService TutorDirectoryService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Profil</PageTitle>
@@ -16,73 +17,154 @@
 else if (CurrentUser is not null)
 {
     <section class="profile-page page-with-footer-space">
-        <div class="profile-header">
-            <div>
-                <p class="profile-kicker">Angemeldet</p>
-                <h1>Profil</h1>
-                <p class="profile-subtitle">Deine Kontodaten und sichtbaren Profilinformationen.</p>
+        <div class="profile-hero">
+            <div class="profile-hero-main">
+                <label class="profile-avatar-shell profile-avatar-upload-label @(HasProfileImage ? "has-image" : "is-empty")" for="profile-image-upload">
+                    @if (HasProfileImage)
+                    {
+                        <img src="@UserSessionService.ProfileImageDataUrl" alt="@CurrentUser.FullName" class="profile-avatar" />
+                        <span class="profile-avatar-overlay">Profilbild &auml;ndern</span>
+                    }
+                    else
+                    {
+                        <div class="profile-avatar-placeholder" aria-label="Profilbild hochladen">
+                            <span class="profile-avatar-plus" aria-hidden="true">+</span>
+                        </div>
+                    }
+                    <InputFile id="profile-image-upload" class="profile-upload-input" OnChange="HandleProfileImageSelectedAsync" accept="image/*" />
+                </label>
+
+                <div class="profile-hero-copy">
+                    <p class="profile-kicker">Mein Profil</p>
+                    <h1>@CurrentUser.FullName</h1>
+                    <p class="profile-subtitle">Hier verwaltest du deine Kontodaten, dein sichtbares CLASS Profil und dein Tutor-Angebot.</p>
+                    <div class="profile-hero-actions">
+                    </div>
+                </div>
             </div>
         </div>
 
+        @if (!string.IsNullOrWhiteSpace(ProfileImageUploadMessage))
+        {
+            <p class="profile-upload-message">@ProfileImageUploadMessage</p>
+        }
+
         <div class="profile-grid">
-            <aside class="profile-card">
-                @if (!string.IsNullOrWhiteSpace(UserSessionService.ProfileImageDataUrl))
+            <section class="profile-detail-panel profile-account-panel" aria-labelledby="profile-account-heading">
+                <div class="profile-detail-header">
+                    <div>
+                        <p class="profile-kicker">Accountverwaltung</p>
+                        <h2 id="profile-account-heading">Deine Daten</h2>
+                    </div>
+                </div>
+
+                <EditForm Model="CurrentUser" OnValidSubmit="SaveProfileChanges" class="profile-edit-form">
+                    <div class="profile-info-grid">
+                        <div class="offer-form-field">
+                            <label for="profile-first-name">Vorname</label>
+                            <InputText id="profile-first-name" class="offer-form-input" @bind-Value="CurrentUser.FirstName" />
+                        </div>
+                        <div class="offer-form-field">
+                            <label for="profile-last-name">Nachname</label>
+                            <InputText id="profile-last-name" class="offer-form-input" @bind-Value="CurrentUser.LastName" />
+                        </div>
+                        <div class="offer-form-field profile-info-item-wide">
+                            <label for="profile-email">E-Mail</label>
+                            <InputText id="profile-email" class="offer-form-input" type="email" @bind-Value="CurrentUser.Email" />
+                        </div>
+                        <div class="offer-form-field">
+                            <label for="profile-grade">Klasse</label>
+                            <InputText id="profile-grade" class="offer-form-input" placeholder="z. B. 3BHIT" @bind-Value="CurrentUser.Grade" />
+                        </div>
+                        <div class="offer-form-field">
+                            <label for="profile-school-type">Schultyp</label>
+                            <InputSelect id="profile-school-type" class="offer-form-input" @bind-Value="CurrentUser.SchoolType">
+                                <option value="">Bitte w&auml;hlen</option>
+                                <option>Tagesschule</option>
+                                <option>Abendschule</option>
+                            </InputSelect>
+                        </div>
+                        <div class="offer-form-field profile-info-item-wide">
+                            <label for="profile-description">Beschreibung</label>
+                            <InputTextArea id="profile-description" class="offer-form-input offer-form-textarea" @bind-Value="CurrentUser.Description" />
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(ProfileSaveMessage))
+                    {
+                        <p class="profile-save-message">@ProfileSaveMessage</p>
+                    }
+
+                    <div class="profile-edit-actions">
+                        <button type="submit" class="btn-primary-custom">Daten speichern</button>
+                    </div>
+                </EditForm>
+            </section>
+
+            <aside class="profile-tutor-panel" aria-labelledby="profile-tutor-heading">
+                <div class="profile-detail-header">
+                    <div>
+                        <p class="profile-kicker">Tutor-Profil</p>
+                        <h2 id="profile-tutor-heading">@GetTutorPanelTitle()</h2>
+                    </div>
+                </div>
+
+                @if (IsTutorLoading)
                 {
-                    <img src="@UserSessionService.ProfileImageDataUrl" alt="@CurrentUser.FullName" class="profile-avatar" />
+                    <p class="profile-tutor-muted">Tutor-Angebot wird geladen.</p>
+                }
+                else if (CurrentTutorOffer is not null)
+                {
+                    <div class="profile-tutor-metrics" aria-label="Tutor Kennzahlen">
+                        <div>
+                            <span>Preis pro Stunde</span>
+                            <strong>@GetPriceText(CurrentTutorOffer)</strong>
+                        </div>
+                        <div>
+                            <span>Bewertung</span>
+                            <div class="profile-stars" aria-label="Sternebewertung">
+                                @for (var i = 0; i < 5; i++)
+                                {
+                                    var starClass = GetStarFillClass(CurrentTutorOffer.Rating, i);
+                                    var starSymbol = starClass == "empty" ? "\u2606" : "\u2605";
+
+                                    <span class="star @starClass" aria-hidden="true">@starSymbol</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="profile-tutor-section">
+                        <span>Angebotene F&auml;cher</span>
+                        <div class="profile-subject-list">
+                            @if (CurrentTutorOffer.Subjects.Length == 0)
+                            {
+                                <span class="subject-chip">F&auml;cher folgen</span>
+                            }
+                            else
+                            {
+                                @foreach (var subject in CurrentTutorOffer.Subjects)
+                                {
+                                    <span class="subject-chip">@subject</span>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <p class="profile-tutor-description">@CurrentTutorOffer.Description</p>
                 }
                 else
                 {
-                    <div class="profile-avatar-placeholder" aria-label="Profilbild Platzhalter">
-                        <span>@GetInitials(CurrentUser)</span>
+                    <div class="profile-tutor-empty">
+                        <strong>Noch kein aktives Tutor-Profil</strong>
+                        <p>Als CLASS Nutzer bist du Sch&uuml;ler. Wenn du Nachhilfe anbietest, erscheint hier dein Angebot mit F&auml;chern, Preis und Bewertung.</p>
+                        @if (!string.IsNullOrWhiteSpace(TutorLoadMessage))
+                        {
+                            <small>@TutorLoadMessage</small>
+                        }
                     </div>
                 }
-                <div class="profile-card-content">
-                    <h2>@CurrentUser.FullName</h2>
-                    <p>@GetSchoolLine(CurrentUser)</p>
-                    <a href="mailto:@CurrentUser.Email">@CurrentUser.Email</a>
-                    <div class="profile-meta">
-                        <span>@CurrentUser.StarRating.ToString("0.0") Sterne</span>
-                        <span>@CurrentUser.Rating / 100 Punkte</span>
-                    </div>
-                </div>
             </aside>
-
-            <section class="profile-detail-panel" aria-labelledby="profile-detail-heading">
-                <div class="profile-detail-header">
-                    <div>
-                        <p class="profile-kicker">Profilinfos</p>
-                        <h2 id="profile-detail-heading">Öffentliche Angaben</h2>
-                    </div>
-                    <span class="profile-id">ID @CurrentUser.Uid</span>
-                </div>
-
-                <div class="profile-info-grid">
-                    <div class="profile-info-item">
-                        <span>Vorname</span>
-                        <strong>@CurrentUser.FirstName</strong>
-                    </div>
-                    <div class="profile-info-item">
-                        <span>Nachname</span>
-                        <strong>@CurrentUser.LastName</strong>
-                    </div>
-                    <div class="profile-info-item">
-                        <span>Klasse</span>
-                        <strong>@GetValueOrPlaceholder(CurrentUser.Grade)</strong>
-                    </div>
-                    <div class="profile-info-item">
-                        <span>Schultyp</span>
-                        <strong>@GetValueOrPlaceholder(CurrentUser.SchoolType)</strong>
-                    </div>
-                    <div class="profile-info-item profile-info-item-wide">
-                        <span>Beschreibung</span>
-                        <strong>@GetDescription(CurrentUser.Description)</strong>
-                    </div>
-                    <div class="profile-info-item profile-info-item-wide">
-                        <span>Profilbild</span>
-                        <strong>@(string.IsNullOrWhiteSpace(UserSessionService.ProfileImageDataUrl) ? "Noch nicht in der Datenbank verfügbar" : "Für diese Sitzung gespeichert")</strong>
-                    </div>
-                </div>
-            </section>
         </div>
     </section>
 }
@@ -102,49 +184,92 @@ else
 
 @code {
     private bool IsLoading = true;
+    private bool IsTutorLoading;
     private UserProfile? CurrentUser;
+    private TutorOffer? CurrentTutorOffer;
+    private string ProfileImageUploadMessage { get; set; } = string.Empty;
+    private string ProfileSaveMessage { get; set; } = string.Empty;
+    private string TutorLoadMessage { get; set; } = string.Empty;
+
+    private bool HasProfileImage => !string.IsNullOrWhiteSpace(UserSessionService.ProfileImageDataUrl);
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.CompletedTask;
-
-        IsLoading = false;
         CurrentUser = UserSessionService.CurrentUser;
 
         if (CurrentUser is null)
         {
+            IsLoading = false;
             NavigationManager.NavigateTo("/login?returnUrl=/profil", replace: true);
+            return;
         }
+
+        IsLoading = false;
+        IsTutorLoading = true;
+
+        var tutorResult = await TutorDirectoryService.GetTutorsAsync();
+        CurrentTutorOffer = tutorResult.Tutors.FirstOrDefault(IsCurrentUserTutorOffer);
+        TutorLoadMessage = tutorResult.Message ?? string.Empty;
+        IsTutorLoading = false;
     }
 
-    private static string GetSchoolLine(UserProfile user)
+    private async Task HandleProfileImageSelectedAsync(InputFileChangeEventArgs args)
     {
-        var parts = new[] { user.Grade, user.SchoolType }
-            .Where(part => !string.IsNullOrWhiteSpace(part))
-            .Select(part => part.Trim());
-
-        var value = string.Join(", ", parts);
-        return string.IsNullOrWhiteSpace(value) ? "CLASS Profil" : value;
+        var file = args.File;
+        UserSessionService.UpdateProfileImage(await ReadImageDataUrlAsync(file));
+        ProfileImageUploadMessage = $"{file.Name} wurde als Profilbild gespeichert.";
     }
 
-    private static string GetValueOrPlaceholder(string value)
+    private void SaveProfileChanges()
     {
-        return string.IsNullOrWhiteSpace(value) ? "Noch nicht angegeben" : value.Trim();
+        ProfileSaveMessage = "Deine Daten wurden für diese Sitzung gespeichert.";
     }
 
-    private static string GetDescription(string description)
+    private bool IsCurrentUserTutorOffer(TutorOffer tutor)
     {
-        return string.IsNullOrWhiteSpace(description)
-            ? "Noch keine Beschreibung hinterlegt."
-            : description.Trim();
+        if (CurrentUser is null)
+        {
+            return false;
+        }
+
+        return string.Equals(tutor.Email, CurrentUser.Email, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetInitials(UserProfile user)
+    private string GetTutorPanelTitle()
     {
-        var first = string.IsNullOrWhiteSpace(user.FirstName) ? string.Empty : user.FirstName.Trim()[0].ToString();
-        var last = string.IsNullOrWhiteSpace(user.LastName) ? string.Empty : user.LastName.Trim()[0].ToString();
-        var initials = $"{first}{last}".ToUpperInvariant();
-
-        return string.IsNullOrWhiteSpace(initials) ? "CL" : initials;
+        return CurrentTutorOffer is null ? "Dein Nachhilfeangebot" : "Dein sichtbares Angebot";
     }
+
+    private static string GetPriceText(TutorOffer tutor)
+    {
+        return tutor.PricePerHour <= 0 ? "Preis folgt" : $"{tutor.PricePerHour} EUR / h";
+    }
+
+    private static string GetStarFillClass(decimal rating, int starIndex)
+    {
+        var starPosition = starIndex + 1;
+
+        if (rating >= starPosition)
+        {
+            return "filled";
+        }
+
+        if (rating >= starPosition - 0.5m)
+        {
+            return "half-filled";
+        }
+
+        return "empty";
+    }
+
+    private static async Task<string> ReadImageDataUrlAsync(IBrowserFile file)
+    {
+        const long maxFileSize = 5 * 1024 * 1024;
+        await using var stream = file.OpenReadStream(maxFileSize);
+        using var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream);
+
+        return $"data:{file.ContentType};base64,{Convert.ToBase64String(memoryStream.ToArray())}";
+    }
+
 }
