@@ -8,5 +8,6 @@ public sealed class LoginFormModel
     [EmailAddress(ErrorMessage = "Bitte gib eine gültige E-Mail-Adresse ein.")]
     public string Email { get; set; } = string.Empty;
 
+    [Required(ErrorMessage = "Bitte gib dein Passwort ein.")]
     public string Password { get; set; } = string.Empty;
 }

@@ -6,13 +6,16 @@ public sealed class UserSessionService(ProfileImageStorageService profileImageSt
 {
     public UserProfile? CurrentUser { get; private set; }
 
+    public string AuthToken { get; private set; } = string.Empty;
+
     public string ProfileImageUrl { get; private set; } = string.Empty;
 
     public bool IsLoggedIn => CurrentUser is not null;
 
-    public void SignIn(UserProfile user, string profileImageUrl = "")
+    public void SignIn(UserProfile user, string authToken = "", string profileImageUrl = "")
     {
         CurrentUser = user;
+        AuthToken = authToken;
         ProfileImageUrl = string.IsNullOrWhiteSpace(profileImageUrl)
             ? profileImageStorageService.GetProfileImageUrl(user.Uid)
             : profileImageUrl;
@@ -26,6 +29,7 @@ public sealed class UserSessionService(ProfileImageStorageService profileImageSt
     public void SignOut()
     {
         CurrentUser = null;
+        AuthToken = string.Empty;
         ProfileImageUrl = string.Empty;
     }
 }

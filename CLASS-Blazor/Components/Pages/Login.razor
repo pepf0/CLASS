@@ -125,36 +125,43 @@
                 }
                 else
                 {
-                    <div class="profile-upload-box profile-upload-box-crop">
-                        @if (!string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl))
-                        {
-                            <div class="image-crop-frame">
+                    <div class="registration-image-step">
+                        <label class="profile-avatar-shell profile-avatar-upload-label registration-avatar-shell @(HasRegistrationProfileImage ? "has-image" : "is-empty")" for="register-image">
+                            @if (HasRegistrationProfileImage)
+                            {
                                 <img src="@RegistrationModel.ProfileImageDataUrl"
-                                     alt=""
+                                     alt="Profilbild Vorschau"
+                                     class="profile-avatar registration-avatar-preview"
                                      style="transform: translate(@ImageOffsetXpx, @ImageOffsetYpx) scale(@ImageZoomValue);" />
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="profile-avatar-placeholder profile-avatar-placeholder-small">
-                                <span>@GetRegistrationInitials()</span>
-                            </div>
-                        }
-                        <div class="profile-upload-controls">
-                            <label for="register-image">Profilbild</label>
-                            <InputFile id="register-image" OnChange="HandleProfileImageSelectedAsync" accept="image/*" />
+                                <span class="profile-avatar-overlay registration-avatar-overlay" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" focusable="false">
+                                        <path d="M4.75 19.25h4.1L18.7 9.4a2.9 2.9 0 0 0-4.1-4.1L4.75 15.15v4.1Z" />
+                                        <path d="M13.35 6.55l4.1 4.1" />
+                                    </svg>
+                                </span>
+                            }
+                            else
+                            {
+                                <div class="profile-avatar-placeholder" aria-label="Profilbild hochladen">
+                                    <span class="profile-avatar-plus" aria-hidden="true">+</span>
+                                </div>
+                            }
+                            <InputFile id="register-image" class="profile-upload-input" OnChange="HandleProfileImageSelectedAsync" accept="image/*" />
+                        </label>
+                        <div class="profile-upload-controls registration-image-controls">
+                            <span class="registration-image-label">Profilbild</span>
                             <ValidationMessage For="@(() => RegistrationModel.ProfileImageName)" />
                             <p>@(string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageName) ? "Noch kein Bild ausgewählt" : RegistrationModel.ProfileImageName)</p>
 
-                            @if (!string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl))
+                            @if (HasRegistrationProfileImage)
                             {
                                 <div class="crop-controls">
                                     <label for="crop-zoom">Zoom</label>
-                                    <InputNumber id="crop-zoom" class="offer-form-input" min="1" max="3" step="0.1" @bind-Value="ImageZoom" />
+                                    <input id="crop-zoom" class="crop-slider" type="range" min="1" max="3" step="0.1" @bind="ImageZoomInput" @bind:event="oninput" />
                                     <label for="crop-x">Horizontal</label>
-                                    <InputNumber id="crop-x" class="offer-form-input" min="-100" max="100" step="1" @bind-Value="ImageOffsetX" />
+                                    <input id="crop-x" class="crop-slider" type="range" min="-100" max="100" step="1" @bind="ImageOffsetX" @bind:event="oninput" />
                                     <label for="crop-y">Vertikal</label>
-                                    <InputNumber id="crop-y" class="offer-form-input" min="-100" max="100" step="1" @bind-Value="ImageOffsetY" />
+                                    <input id="crop-y" class="crop-slider" type="range" min="-100" max="100" step="1" @bind="ImageOffsetY" @bind:event="oninput" />
                                 </div>
                             }
                         </div>
@@ -193,6 +200,8 @@
 
     private static readonly string[] RegistrationSteps = ["Konto", "Schule", "Bild"];
 
+    private const long MaxProfileImageSizeBytes = 5 * 1024 * 1024;
+
     private LoginFormModel LoginModel { get; set; } = new();
 
     private RegistrationFormModel RegistrationModel { get; set; } = new();
@@ -217,9 +226,23 @@
 
     private string ImageZoomValue => ImageZoom.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
 
+    private string ImageZoomInput
+    {
+        get => ImageZoom.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var zoom))
+            {
+                ImageZoom = Math.Clamp(zoom, 1.0, 3.0);
+            }
+        }
+    }
+
     private string ImageOffsetXpx => $"{ImageOffsetX}px";
 
     private string ImageOffsetYpx => $"{ImageOffsetY}px";
+
+    private bool HasRegistrationProfileImage => !string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl);
 
     protected override void OnParametersSet()
     {
@@ -243,11 +266,11 @@
     private async Task HandleLoginAsync()
     {
         AuthMessage = string.Empty;
-        var result = await UserProfileService.LoginAsync(LoginModel.Email);
+        var result = await UserProfileService.LoginAsync(LoginModel.Email, LoginModel.Password);
 
         if (result.IsAuthenticated && result.User is not null)
         {
-            UserSessionService.SignIn(result.User);
+            UserSessionService.SignIn(result.User, result.AuthToken ?? string.Empty);
             NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
             return;
         }
@@ -274,7 +297,7 @@
 
         if (result.IsAuthenticated && result.User is not null)
         {
-            UserSessionService.SignIn(result.User);
+            UserSessionService.SignIn(result.User, result.AuthToken ?? string.Empty);
             NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
             return;
         }
@@ -291,6 +314,15 @@
     private async Task HandleProfileImageSelectedAsync(InputFileChangeEventArgs args)
     {
         var file = args.File;
+
+        if (file.Size > MaxProfileImageSizeBytes)
+        {
+            RegistrationModel.ProfileImageName = string.Empty;
+            RegistrationModel.ProfileImageDataUrl = string.Empty;
+            AuthMessage = $"Das Bild überschreitet die maximale Größe von {GetMaxProfileImageSizeText()}.";
+            return;
+        }
+
         RegistrationModel.ProfileImageName = file.Name;
         RegistrationModel.ProfileImageDataUrl = await ReadImageDataUrlAsync(file);
         ImageZoom = 1.2;
@@ -386,12 +418,16 @@
 
     private static async Task<string> ReadImageDataUrlAsync(IBrowserFile file)
     {
-        const long maxFileSize = 5 * 1024 * 1024;
-        await using var stream = file.OpenReadStream(maxFileSize);
+        await using var stream = file.OpenReadStream(MaxProfileImageSizeBytes);
         using var memoryStream = new MemoryStream();
         await stream.CopyToAsync(memoryStream);
 
         return $"data:{file.ContentType};base64,{Convert.ToBase64String(memoryStream.ToArray())}";
+    }
+
+    private static string GetMaxProfileImageSizeText()
+    {
+        return $"{MaxProfileImageSizeBytes / 1024 / 1024} MB";
     }
 
     private async Task<string> CropProfileImageAsync()

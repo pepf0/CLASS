@@ -8,9 +8,9 @@ public sealed class TutorDirectoryService(
     ILogger<TutorDirectoryService> logger,
     ProfileImageStorageService profileImageStorageService)
 {
-    private const string TutorApiUrl = "https://pepf.net/api/class/offer";
-    private const string UserApiUrl = "https://pepf.net/api/class/user";
-    private const string SubjectApiUrl = "https://pepf.net/api/class/subject";
+    private const string TutorApiUrl = "offer";
+    private const string UserApiUrl = "user";
+    private const string SubjectApiUrl = "subject";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {

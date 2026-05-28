@@ -11,11 +11,11 @@ builder.Services.AddScoped<ProfileImageStorageService>();
 builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddHttpClient<TutorDirectoryService>(client =>
 {
-    client.BaseAddress = new Uri("https://pepf.net/");
+    client.BaseAddress = new Uri("https://pepf.net/api/class/");
 });
 builder.Services.AddHttpClient<UserProfileService>(client =>
 {
-    client.BaseAddress = new Uri("https://pepf.net/");
+    client.BaseAddress = new Uri("https://pepf.net/api/class/");
 });
 
 var app = builder.Build();

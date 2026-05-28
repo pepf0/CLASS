@@ -18,6 +18,7 @@ public sealed class RegistrationFormModel
     public string Email { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Bitte gib ein Passwort ein.")]
+    [MinLength(8, ErrorMessage = "Das Passwort muss mindestens 8 Zeichen lang sein.")]
     [StringLength(255, ErrorMessage = "Das Passwort darf maximal 255 Zeichen lang sein.")]
     public string Password { get; set; } = string.Empty;
 

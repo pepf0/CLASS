@@ -1,5 +1,6 @@
 @page "/profil"
 @inject UserSessionService UserSessionService
+@inject UserProfileService UserProfileService
 @inject TutorDirectoryService TutorDirectoryService
 @inject ProfileImageStorageService ProfileImageStorageService
 @inject NavigationManager NavigationManager
@@ -185,6 +186,8 @@ else
 }
 
 @code {
+    private const long MaxProfileImageSizeBytes = 5 * 1024 * 1024;
+
     private bool IsLoading = true;
     private bool IsTutorLoading;
     private UserProfile? CurrentUser;
@@ -220,6 +223,12 @@ else
         var file = args.File;
         ProfileImageUploadMessage = string.Empty;
 
+        if (file.Size > MaxProfileImageSizeBytes)
+        {
+            ProfileImageUploadMessage = $"Das Bild überschreitet die maximale Größe von {GetMaxProfileImageSizeText()}.";
+            return;
+        }
+
         if (CurrentUser is null)
         {
             return;
@@ -251,9 +260,29 @@ else
         }
     }
 
-    private void SaveProfileChanges()
+    private async Task SaveProfileChanges()
     {
-        ProfileSaveMessage = "Deine Daten wurden für diese Sitzung gespeichert.";
+        if (CurrentUser is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(UserSessionService.AuthToken))
+        {
+            ProfileSaveMessage = "Deine Daten konnten nicht gespeichert werden, weil du nicht authentifiziert bist.";
+            return;
+        }
+
+        var wasSaved = await UserProfileService.UpdateProfileAsync(
+            CurrentUser.Uid,
+            CurrentUser.Description,
+            CurrentUser.Grade,
+            CurrentUser.SchoolType,
+            UserSessionService.AuthToken);
+
+        ProfileSaveMessage = wasSaved
+            ? "Deine Daten wurden gespeichert."
+            : "Deine Daten konnten nicht gespeichert werden.";
     }
 
     private bool IsCurrentUserTutorOffer(TutorOffer tutor)
@@ -295,12 +324,16 @@ else
 
     private static async Task<string> ReadImageDataUrlAsync(IBrowserFile file)
     {
-        const long maxFileSize = 5 * 1024 * 1024;
-        await using var stream = file.OpenReadStream(maxFileSize);
+        await using var stream = file.OpenReadStream(MaxProfileImageSizeBytes);
         using var memoryStream = new MemoryStream();
         await stream.CopyToAsync(memoryStream);
 
         return $"data:{file.ContentType};base64,{Convert.ToBase64String(memoryStream.ToArray())}";
+    }
+
+    private static string GetMaxProfileImageSizeText()
+    {
+        return $"{MaxProfileImageSizeBytes / 1024 / 1024} MB";
     }
 
 }

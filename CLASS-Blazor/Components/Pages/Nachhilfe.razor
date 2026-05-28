@@ -175,7 +175,10 @@
                                 <p class="tutor-school">@tutor.SchoolInfo</p>
                             </div>
                             <span class="expiry-badge">
-                                <img src="/images/icons/clock_icon.webp" alt="" class="expiry-icon" aria-hidden="true" />
+                                <svg class="expiry-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <circle cx="12" cy="12" r="8.25" />
+                                    <path d="M12 7.5v4.7l3.15 2.05" />
+                                </svg>
                                 <span>@tutor.ExpiresOn.ToString("dd.MM.yyyy")</span>
                             </span>
                         </div>
