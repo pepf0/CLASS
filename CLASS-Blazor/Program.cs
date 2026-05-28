@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddScoped<DashboardDataService>();
+builder.Services.AddScoped<ProfileImageStorageService>();
 builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddHttpClient<TutorDirectoryService>(client =>
 {
@@ -28,6 +29,7 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 
 app.UseAntiforgery();
 

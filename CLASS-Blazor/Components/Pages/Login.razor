@@ -274,7 +274,7 @@
 
         if (result.IsAuthenticated && result.User is not null)
         {
-            UserSessionService.SignIn(result.User, RegistrationModel.CroppedProfileImageDataUrl);
+            UserSessionService.SignIn(result.User);
             NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
             return;
         }

@@ -19,7 +19,7 @@ window.profileImageCropper = {
                 context.fillRect(0, 0, outputSize, outputSize);
                 context.drawImage(image, x, y, width, height);
 
-                resolve(canvas.toDataURL("image/jpeg", 0.9));
+                resolve(canvas.toDataURL("image/webp", 0.9));
             };
 
             image.onerror = function () {

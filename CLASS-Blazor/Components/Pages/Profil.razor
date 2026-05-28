@@ -1,7 +1,9 @@
 @page "/profil"
 @inject UserSessionService UserSessionService
 @inject TutorDirectoryService TutorDirectoryService
+@inject ProfileImageStorageService ProfileImageStorageService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Profil</PageTitle>
 
@@ -22,7 +24,7 @@ else if (CurrentUser is not null)
                 <label class="profile-avatar-shell profile-avatar-upload-label @(HasProfileImage ? "has-image" : "is-empty")" for="profile-image-upload">
                     @if (HasProfileImage)
                     {
-                        <img src="@UserSessionService.ProfileImageDataUrl" alt="@CurrentUser.FullName" class="profile-avatar" />
+                        <img src="@UserSessionService.ProfileImageUrl" alt="@CurrentUser.FullName" class="profile-avatar" />
                         <span class="profile-avatar-overlay">Profilbild &auml;ndern</span>
                     }
                     else
@@ -191,7 +193,7 @@ else
     private string ProfileSaveMessage { get; set; } = string.Empty;
     private string TutorLoadMessage { get; set; } = string.Empty;
 
-    private bool HasProfileImage => !string.IsNullOrWhiteSpace(UserSessionService.ProfileImageDataUrl);
+    private bool HasProfileImage => !string.IsNullOrWhiteSpace(UserSessionService.ProfileImageUrl);
 
     protected override async Task OnInitializedAsync()
     {
@@ -216,8 +218,37 @@ else
     private async Task HandleProfileImageSelectedAsync(InputFileChangeEventArgs args)
     {
         var file = args.File;
-        UserSessionService.UpdateProfileImage(await ReadImageDataUrlAsync(file));
-        ProfileImageUploadMessage = $"{file.Name} wurde als Profilbild gespeichert.";
+        ProfileImageUploadMessage = string.Empty;
+
+        if (CurrentUser is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var imageDataUrl = await ReadImageDataUrlAsync(file);
+            var webpDataUrl = await JS.InvokeAsync<string>(
+                "profileImageCropper.crop",
+                imageDataUrl,
+                1.0,
+                0,
+                0,
+                512);
+            var imageUrl = await ProfileImageStorageService.SaveProfileImageDataUrlAsync(CurrentUser.Uid, webpDataUrl);
+
+            UserSessionService.UpdateProfileImageUrl(imageUrl);
+            ProfileImageUploadMessage = $"{file.Name} wurde als WebP-Profilbild gespeichert.";
+
+            if (CurrentTutorOffer is not null)
+            {
+                CurrentTutorOffer = CurrentTutorOffer with { ImageUrl = imageUrl };
+            }
+        }
+        catch (Exception exception)
+        {
+            ProfileImageUploadMessage = $"Das Profilbild konnte nicht gespeichert werden: {exception.Message}";
+        }
     }
 
     private void SaveProfileChanges()

@@ -2,28 +2,30 @@ using CLASS_Blazor.Models;
 
 namespace CLASS_Blazor.Services;
 
-public sealed class UserSessionService
+public sealed class UserSessionService(ProfileImageStorageService profileImageStorageService)
 {
     public UserProfile? CurrentUser { get; private set; }
 
-    public string ProfileImageDataUrl { get; private set; } = string.Empty;
+    public string ProfileImageUrl { get; private set; } = string.Empty;
 
     public bool IsLoggedIn => CurrentUser is not null;
 
-    public void SignIn(UserProfile user, string profileImageDataUrl = "")
+    public void SignIn(UserProfile user, string profileImageUrl = "")
     {
         CurrentUser = user;
-        ProfileImageDataUrl = profileImageDataUrl;
+        ProfileImageUrl = string.IsNullOrWhiteSpace(profileImageUrl)
+            ? profileImageStorageService.GetProfileImageUrl(user.Uid)
+            : profileImageUrl;
     }
 
-    public void UpdateProfileImage(string profileImageDataUrl)
+    public void UpdateProfileImageUrl(string profileImageUrl)
     {
-        ProfileImageDataUrl = profileImageDataUrl;
+        ProfileImageUrl = profileImageUrl;
     }
 
     public void SignOut()
     {
         CurrentUser = null;
-        ProfileImageDataUrl = string.Empty;
+        ProfileImageUrl = string.Empty;
     }
 }

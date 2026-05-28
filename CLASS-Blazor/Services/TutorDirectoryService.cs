@@ -5,7 +5,8 @@ namespace CLASS_Blazor.Services;
 
 public sealed class TutorDirectoryService(
     HttpClient httpClient,
-    ILogger<TutorDirectoryService> logger)
+    ILogger<TutorDirectoryService> logger,
+    ProfileImageStorageService profileImageStorageService)
 {
     private const string TutorApiUrl = "https://pepf.net/api/class/offer";
     private const string UserApiUrl = "https://pepf.net/api/class/user";
@@ -108,7 +109,7 @@ public sealed class TutorDirectoryService(
         return [];
     }
 
-    private static IReadOnlyList<TutorOffer> BuildTutorsFromApi(
+    private IReadOnlyList<TutorOffer> BuildTutorsFromApi(
         IEnumerable<ClassOfferDto> apiOffers,
         IReadOnlyDictionary<int, UserProfile> usersById,
         IReadOnlyDictionary<int, SubjectDto> subjectsById)
@@ -129,7 +130,7 @@ public sealed class TutorDirectoryService(
                     ReviewCount: GetReviewCount(user?.Rating ?? 0),
                     PricePerHour: Math.Max(0, apiOffer.MinPrice),
                     ExpiresOn: GetExpiryDate(apiOffer.Until),
-                    ImageUrl: string.Empty);
+                    ImageUrl: profileImageStorageService.GetProfileImageUrl(apiOffer.OffererUid));
             })
             .Where(tutor => !string.IsNullOrWhiteSpace(tutor.Name))
             .ToList();

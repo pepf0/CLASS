@@ -7,7 +7,8 @@ namespace CLASS_Blazor.Services;
 
 public sealed class UserProfileService(
     HttpClient httpClient,
-    ILogger<UserProfileService> logger)
+    ILogger<UserProfileService> logger,
+    ProfileImageStorageService profileImageStorageService)
 {
     private const string UserApiUrl = "api/class/user";
 
@@ -121,6 +122,14 @@ public sealed class UserProfileService(
             {
                 await UpdateProfileAsync(createdUserResult.User.Uid, form.Description, form.Grade, form.SchoolType, cancellationToken);
                 createdUserResult.User.Description = form.Description.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(form.CroppedProfileImageDataUrl))
+            {
+                await profileImageStorageService.SaveProfileImageDataUrlAsync(
+                    createdUserResult.User.Uid,
+                    form.CroppedProfileImageDataUrl,
+                    cancellationToken);
             }
 
             return createdUserResult;
