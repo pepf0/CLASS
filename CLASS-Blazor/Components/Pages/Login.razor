@@ -3,6 +3,7 @@
 @inject UserProfileService UserProfileService
 @inject UserSessionService UserSessionService
 @inject IJSRuntime JS
+@inject ILogger<Login> Logger
 
 <PageTitle>Login / Registrieren</PageTitle>
 
@@ -65,9 +66,13 @@
                 </div>
             </div>
 
+            @if (!string.IsNullOrWhiteSpace(AuthMessage))
+            {
+                <p class="auth-message">@AuthMessage</p>
+            }
+
             <EditForm EditContext="RegistrationEditContext" OnSubmit="HandleRegisterSubmitAsync" class="auth-form">
                 <DataAnnotationsValidator />
-                <ValidationSummary />
 
                 @if (RegistrationStep == 0)
                 {
@@ -129,10 +134,12 @@
                         <label class="profile-avatar-shell profile-avatar-upload-label registration-avatar-shell @(HasRegistrationProfileImage ? "has-image" : "is-empty")" for="register-image">
                             @if (HasRegistrationProfileImage)
                             {
-                                <img src="@RegistrationModel.ProfileImageDataUrl"
-                                     alt="Profilbild Vorschau"
-                                     class="profile-avatar registration-avatar-preview"
-                                     style="transform: translate(@ImageOffsetXpx, @ImageOffsetYpx) scale(@ImageZoomValue);" />
+                                <span class="registration-avatar-crop-frame">
+                                    <img src="@RegistrationProfileImagePreviewUrl"
+                                         alt="Profilbild Vorschau"
+                                         class="registration-avatar-preview"
+                                         style="@RegistrationAvatarPreviewStyle" />
+                                </span>
                                 <span class="profile-avatar-overlay registration-avatar-overlay" aria-hidden="true">
                                     <svg viewBox="0 0 24 24" focusable="false">
                                         <path d="M4.75 19.25h4.1L18.7 9.4a2.9 2.9 0 0 0-4.1-4.1L4.75 15.15v4.1Z" />
@@ -150,7 +157,6 @@
                         </label>
                         <div class="profile-upload-controls registration-image-controls">
                             <span class="registration-image-label">Profilbild</span>
-                            <ValidationMessage For="@(() => RegistrationModel.ProfileImageName)" />
                             <p>@(string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageName) ? "Noch kein Bild ausgewählt" : RegistrationModel.ProfileImageName)</p>
 
                             @if (HasRegistrationProfileImage)
@@ -158,27 +164,22 @@
                                 <div class="crop-controls">
                                     <label for="crop-zoom">Zoom</label>
                                     <input id="crop-zoom" class="crop-slider" type="range" min="1" max="3" step="0.1" @bind="ImageZoomInput" @bind:event="oninput" />
-                                    <label for="crop-x">Horizontal</label>
-                                    <input id="crop-x" class="crop-slider" type="range" min="-100" max="100" step="1" @bind="ImageOffsetX" @bind:event="oninput" />
-                                    <label for="crop-y">Vertikal</label>
-                                    <input id="crop-y" class="crop-slider" type="range" min="-100" max="100" step="1" @bind="ImageOffsetY" @bind:event="oninput" />
+                                    <label for="crop-x" class="@GetCropControlLabelClass(CanOffsetImageX)">Horizontal</label>
+                                    <input id="crop-x" class="crop-slider" type="range" min="@(-MaxImageOffsetX)" max="@MaxImageOffsetX" step="1" disabled="@(!CanOffsetImageX)" @bind="ImageOffsetX" @bind:event="oninput" />
+                                    <label for="crop-y" class="@GetCropControlLabelClass(CanOffsetImageY)">Vertikal</label>
+                                    <input id="crop-y" class="crop-slider" type="range" min="@(-MaxImageOffsetY)" max="@MaxImageOffsetY" step="1" disabled="@(!CanOffsetImageY)" @bind="ImageOffsetY" @bind:event="oninput" />
                                 </div>
                             }
                         </div>
                     </div>
                 }
 
-                @if (!string.IsNullOrWhiteSpace(AuthMessage))
-                {
-                    <p class="auth-message">@AuthMessage</p>
-                }
-
                 <div class="auth-actions">
                     @if (RegistrationStep > 0)
                     {
-                        <button type="button" class="btn-secondary-custom" @onclick="PreviousRegistrationStep">Zurück</button>
+                        <button type="button" class="btn-secondary-custom" @onclick="PreviousRegistrationStep" disabled="@IsRegistering">Zurück</button>
                     }
-                    <button type="submit" class="btn-primary-custom">@GetRegisterButtonText()</button>
+                    <button type="submit" class="btn-primary-custom" disabled="@IsRegistering">@GetRegisterButtonText()</button>
                 </div>
             </EditForm>
         }
@@ -186,7 +187,10 @@
 </section>
 
 @code {
-    [SupplyParameterFromQuery]
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    public string? ReturnUrlQuery { get; set; }
+
+    [Parameter]
     public string? ReturnUrl { get; set; }
 
     [Parameter]
@@ -216,15 +220,23 @@
 
     private string AuthMessage { get; set; } = string.Empty;
 
+    private bool IsRegistering { get; set; }
+
+    private string RegistrationProfileImagePreviewUrl { get; set; } = string.Empty;
+
     private string RegistrationProgress => $"{((RegistrationStep + 1) * 100) / RegistrationSteps.Length}%";
 
-    private double ImageZoom { get; set; } = 1.2;
+    private const int CropOutputSize = 512;
 
-    private int ImageOffsetX { get; set; }
+    private double ImageZoom { get; set; } = 1.0;
 
-    private int ImageOffsetY { get; set; }
+    private int imageOffsetX;
 
-    private string ImageZoomValue => ImageZoom.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+    private int imageOffsetY;
+
+    private double ImageNaturalWidth { get; set; }
+
+    private double ImageNaturalHeight { get; set; }
 
     private string ImageZoomInput
     {
@@ -234,15 +246,46 @@
             if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var zoom))
             {
                 ImageZoom = Math.Clamp(zoom, 1.0, 3.0);
+                ClampImageOffsets();
             }
         }
     }
 
-    private string ImageOffsetXpx => $"{ImageOffsetX}px";
+    private int ImageOffsetX
+    {
+        get => imageOffsetX;
+        set => imageOffsetX = ClampImageOffset(value, MaxImageOffsetX);
+    }
 
-    private string ImageOffsetYpx => $"{ImageOffsetY}px";
+    private int ImageOffsetY
+    {
+        get => imageOffsetY;
+        set => imageOffsetY = ClampImageOffset(value, MaxImageOffsetY);
+    }
 
-    private bool HasRegistrationProfileImage => !string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl);
+    private int MaxImageOffsetX => GetMaxImageOffset(isHorizontal: true);
+
+    private int MaxImageOffsetY => GetMaxImageOffset(isHorizontal: false);
+
+    private bool CanOffsetImageX => MaxImageOffsetX > 0;
+
+    private bool CanOffsetImageY => MaxImageOffsetY > 0;
+
+    private string RegistrationAvatarPreviewStyle
+    {
+        get
+        {
+            var widthPercent = GetPreviewImagePercent(isHorizontal: true);
+            var heightPercent = GetPreviewImagePercent(isHorizontal: false);
+            var leftPercent = 50 + (ImageOffsetX * 100.0 / CropOutputSize);
+            var topPercent = 50 + (ImageOffsetY * 100.0 / CropOutputSize);
+
+            return FormattableString.Invariant(
+                $"width: {widthPercent:0.###}%; height: {heightPercent:0.###}%; left: {leftPercent:0.###}%; top: {topPercent:0.###}%;");
+        }
+    }
+
+    private bool HasRegistrationProfileImage => !string.IsNullOrWhiteSpace(RegistrationProfileImagePreviewUrl);
 
     protected override void OnParametersSet()
     {
@@ -280,6 +323,11 @@
 
     private async Task HandleRegisterSubmitAsync(EditContext editContext)
     {
+        if (IsRegistering)
+        {
+            return;
+        }
+
         if (!ValidateRegistrationStep())
         {
             return;
@@ -292,17 +340,42 @@
             return;
         }
 
-        RegistrationModel.CroppedProfileImageDataUrl = await CropProfileImageAsync();
-        var result = await UserProfileService.RegisterAsync(RegistrationModel);
+        IsRegistering = true;
+        AuthMessage = string.Empty;
 
-        if (result.IsAuthenticated && result.User is not null)
+        try
         {
+            try
+            {
+                RegistrationModel.CroppedProfileImageDataUrl = await CropProfileImageAsync();
+            }
+            catch (Exception exception)
+            {
+                Logger.LogWarning(exception, "Profile image cropping failed during registration.");
+                AuthMessage = $"Das Profilbild konnte nicht verarbeitet werden: {exception.Message}";
+                return;
+            }
+
+            var result = await UserProfileService.RegisterAsync(RegistrationModel);
+
+            if (!result.IsAuthenticated || result.User is null)
+            {
+                AuthMessage = result.ErrorMessage ?? "Registrierung fehlgeschlagen.";
+                return;
+            }
+
             UserSessionService.SignIn(result.User, result.AuthToken ?? string.Empty);
             NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
-            return;
         }
-
-        AuthMessage = result.ErrorMessage ?? "Registrierung fehlgeschlagen.";
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Registration submit failed unexpectedly.");
+            AuthMessage = $"Registrierung fehlgeschlagen: {exception.Message}";
+        }
+        finally
+        {
+            IsRegistering = false;
+        }
     }
 
     private void PreviousRegistrationStep()
@@ -319,13 +392,35 @@
         {
             RegistrationModel.ProfileImageName = string.Empty;
             RegistrationModel.ProfileImageDataUrl = string.Empty;
+            RegistrationProfileImagePreviewUrl = string.Empty;
             AuthMessage = $"Das Bild überschreitet die maximale Größe von {GetMaxProfileImageSizeText()}.";
             return;
         }
 
+        LoadedImageInfo imageInfo;
+
+        try
+        {
+            imageInfo = await JS.InvokeAsync<LoadedImageInfo>(
+                "profileImageCropper.loadFromInput",
+                "register-image");
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Profile image could not be loaded for registration.");
+            RegistrationModel.ProfileImageName = string.Empty;
+            RegistrationModel.ProfileImageDataUrl = string.Empty;
+            RegistrationProfileImagePreviewUrl = string.Empty;
+            AuthMessage = $"Das Profilbild konnte nicht geladen werden: {exception.Message}";
+            return;
+        }
+
         RegistrationModel.ProfileImageName = file.Name;
-        RegistrationModel.ProfileImageDataUrl = await ReadImageDataUrlAsync(file);
-        ImageZoom = 1.2;
+        RegistrationModel.ProfileImageDataUrl = string.Empty;
+        RegistrationProfileImagePreviewUrl = imageInfo.Url;
+        ImageNaturalWidth = imageInfo.Width;
+        ImageNaturalHeight = imageInfo.Height;
+        ImageZoom = 1.0;
         ImageOffsetX = 0;
         ImageOffsetY = 0;
         AuthMessage = string.Empty;
@@ -333,6 +428,11 @@
 
     private string GetRegisterButtonText()
     {
+        if (IsRegistering)
+        {
+            return "Registrierung läuft...";
+        }
+
         return RegistrationStep == RegistrationSteps.Length - 1 ? "Registrierung abschließen" : "Weiter";
     }
 
@@ -375,14 +475,30 @@
 
         if (RegistrationStep == 2 && string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageName))
         {
+            AuthMessage = "Bitte wähle zuerst ein Profilbild aus, damit du dich registrieren kannst.";
             RegistrationValidationMessages.Add(
                 RegistrationEditContext.Field(nameof(RegistrationFormModel.ProfileImageName)),
-                "Bitte wähle ein Profilbild aus.");
+                AuthMessage);
+        }
+
+        if (RegistrationStep == 1 && RegistrationModel.BirthDate.HasValue && !IsValidBirthDate(RegistrationModel.BirthDate.Value))
+        {
+            RegistrationValidationMessages.Add(
+                RegistrationEditContext.Field(nameof(RegistrationFormModel.BirthDate)),
+                "Ungültiges Datum.");
         }
 
         RegistrationEditContext.NotifyValidationStateChanged();
 
         return !fields.Any(field => RegistrationEditContext.GetValidationMessages(RegistrationEditContext.Field(field)).Any());
+    }
+
+    private static bool IsValidBirthDate(DateOnly birthDate)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var earliestBirthDate = today.AddYears(-100);
+
+        return birthDate >= earliestBirthDate && birthDate <= today;
     }
 
     private void ValidateRegistrationField(string fieldName)
@@ -413,16 +529,9 @@
 
     private string GetReturnUrl()
     {
-        return string.IsNullOrWhiteSpace(ReturnUrl) ? "/profil" : ReturnUrl;
-    }
+        var returnUrl = string.IsNullOrWhiteSpace(ReturnUrl) ? ReturnUrlQuery : ReturnUrl;
 
-    private static async Task<string> ReadImageDataUrlAsync(IBrowserFile file)
-    {
-        await using var stream = file.OpenReadStream(MaxProfileImageSizeBytes);
-        using var memoryStream = new MemoryStream();
-        await stream.CopyToAsync(memoryStream);
-
-        return $"data:{file.ContentType};base64,{Convert.ToBase64String(memoryStream.ToArray())}";
+        return string.IsNullOrWhiteSpace(returnUrl) ? "/profil" : returnUrl;
     }
 
     private static string GetMaxProfileImageSizeText()
@@ -432,17 +541,70 @@
 
     private async Task<string> CropProfileImageAsync()
     {
-        if (string.IsNullOrWhiteSpace(RegistrationModel.ProfileImageDataUrl))
+        if (!HasRegistrationProfileImage)
         {
             return string.Empty;
         }
 
         return await JS.InvokeAsync<string>(
-            "profileImageCropper.crop",
-            RegistrationModel.ProfileImageDataUrl,
+            "profileImageCropper.cropLoaded",
+            "register-image",
             ImageZoom,
             ImageOffsetX,
             ImageOffsetY,
-            512);
+            CropOutputSize);
+    }
+
+    private int GetMaxImageOffset(bool isHorizontal)
+    {
+        var renderedSize = GetRenderedImageSize(isHorizontal);
+        var overflow = Math.Max(0, renderedSize - CropOutputSize);
+
+        return (int)Math.Floor(overflow / 2);
+    }
+
+    private double GetRenderedImageSize(bool isHorizontal)
+    {
+        if (ImageNaturalWidth <= 0 || ImageNaturalHeight <= 0)
+        {
+            return CropOutputSize * ImageZoom;
+        }
+
+        var coverScale = Math.Max(CropOutputSize / ImageNaturalWidth, CropOutputSize / ImageNaturalHeight) * ImageZoom;
+
+        return (isHorizontal ? ImageNaturalWidth : ImageNaturalHeight) * coverScale;
+    }
+
+    private double GetPreviewImagePercent(bool isHorizontal)
+    {
+        return GetRenderedImageSize(isHorizontal) * 100 / CropOutputSize;
+    }
+
+    private static int ClampImageOffset(int offset, int maxOffset)
+    {
+        return Math.Clamp(offset, -maxOffset, maxOffset);
+    }
+
+    private void ClampImageOffsets()
+    {
+        imageOffsetX = ClampImageOffset(imageOffsetX, MaxImageOffsetX);
+        imageOffsetY = ClampImageOffset(imageOffsetY, MaxImageOffsetY);
+    }
+
+    private static string GetCropControlLabelClass(bool isEnabled)
+    {
+        return isEnabled ? string.Empty : "is-disabled";
+    }
+
+    private sealed class LoadedImageInfo
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("width")]
+        public double Width { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("height")]
+        public double Height { get; set; }
     }
 }

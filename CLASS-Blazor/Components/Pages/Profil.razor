@@ -236,10 +236,13 @@ else
 
         try
         {
-            var imageDataUrl = await ReadImageDataUrlAsync(file);
+            await JS.InvokeAsync<LoadedImageInfo>(
+                "profileImageCropper.loadFromInput",
+                "profile-image-upload");
+
             var webpDataUrl = await JS.InvokeAsync<string>(
-                "profileImageCropper.crop",
-                imageDataUrl,
+                "profileImageCropper.cropLoaded",
+                "profile-image-upload",
                 1.0,
                 0,
                 0,
@@ -322,18 +325,21 @@ else
         return "empty";
     }
 
-    private static async Task<string> ReadImageDataUrlAsync(IBrowserFile file)
-    {
-        await using var stream = file.OpenReadStream(MaxProfileImageSizeBytes);
-        using var memoryStream = new MemoryStream();
-        await stream.CopyToAsync(memoryStream);
-
-        return $"data:{file.ContentType};base64,{Convert.ToBase64String(memoryStream.ToArray())}";
-    }
-
     private static string GetMaxProfileImageSizeText()
     {
         return $"{MaxProfileImageSizeBytes / 1024 / 1024} MB";
+    }
+
+    private sealed class LoadedImageInfo
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("width")]
+        public double Width { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("height")]
+        public double Height { get; set; }
     }
 
 }

@@ -122,6 +122,11 @@ public sealed class UserProfileService(
             return UserProfileResult.Failed("Bitte gib dein Geburtsdatum ein.");
         }
 
+        if (!IsValidBirthDate(form.BirthDate.Value))
+        {
+            return UserProfileResult.Failed("Ungültiges Datum.");
+        }
+
         try
         {
             var payload = new
@@ -162,10 +167,17 @@ public sealed class UserProfileService(
 
             if (!string.IsNullOrWhiteSpace(form.CroppedProfileImageDataUrl))
             {
-                await profileImageStorageService.SaveProfileImageDataUrlAsync(
-                    authResponse.User.Uid,
-                    form.CroppedProfileImageDataUrl,
-                    cancellationToken);
+                try
+                {
+                    await profileImageStorageService.SaveProfileImageDataUrlAsync(
+                        authResponse.User.Uid,
+                        form.CroppedProfileImageDataUrl,
+                        cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(exception, "Profile image could not be saved for new user {UserId}.", authResponse.User.Uid);
+                }
             }
 
             return UserProfileResult.Authenticated(authResponse.User, authResponse.Token);
@@ -175,6 +187,14 @@ public sealed class UserProfileService(
             logger.LogWarning(exception, "User could not be created at {UserApiUrl}/create_user.", UserApiUrl);
             return UserProfileResult.Failed($"Der Account konnte nicht erstellt werden: {exception.Message}");
         }
+    }
+
+    private static bool IsValidBirthDate(DateOnly birthDate)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var earliestBirthDate = today.AddYears(-100);
+
+        return birthDate >= earliestBirthDate && birthDate <= today;
     }
 
     public async Task<bool> UpdateProfileAsync(
