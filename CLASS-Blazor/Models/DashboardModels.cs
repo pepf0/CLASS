@@ -11,7 +11,8 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DashboardChartPoint> HoursByMonth,
     IReadOnlyList<SubjectHoursStat> SubjectHours,
     IReadOnlyList<TutorRequest> OpenRequests,
-    IReadOnlyList<DashboardActivity> Activities);
+    IReadOnlyList<DashboardActivity> Activities,
+    bool IsTestData = false);
 
 public sealed record DashboardChartPoint(
     string Label,

@@ -1,5 +1,6 @@
 @page "/profil"
 @inject UserSessionService UserSessionService
+@inject AuthSessionStorageService AuthSessionStorage
 @inject UserProfileService UserProfileService
 @inject TutorDirectoryService TutorDirectoryService
 @inject ProfileImageStorageService ProfileImageStorageService
@@ -201,6 +202,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         CurrentUser = UserSessionService.CurrentUser;
+
+        if (CurrentUser is null)
+        {
+            await AuthSessionStorage.RestoreFromCookieAsync();
+            CurrentUser = UserSessionService.CurrentUser;
+        }
 
         if (CurrentUser is null)
         {

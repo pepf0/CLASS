@@ -130,7 +130,8 @@ public sealed class TutorDirectoryService(
                     ReviewCount: GetReviewCount(user?.Rating ?? 0),
                     PricePerHour: Math.Max(0, apiOffer.MinPrice),
                     ExpiresOn: GetExpiryDate(apiOffer.Until),
-                    ImageUrl: profileImageStorageService.GetProfileImageUrl(apiOffer.OffererUid));
+                    ImageUrl: profileImageStorageService.GetProfileImageUrl(apiOffer.OffererUid),
+                    OffererUserId: apiOffer.OffererUid);
             })
             .Where(tutor => !string.IsNullOrWhiteSpace(tutor.Name))
             .ToList();

@@ -11,5 +11,7 @@ public sealed record TutorOffer(
     int ReviewCount,
     int PricePerHour,
     DateOnly ExpiresOn,
-    string ImageUrl
+    string ImageUrl,
+    int OffererUserId = 0,
+    int OfferId = 0
 );

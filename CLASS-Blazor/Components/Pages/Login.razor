@@ -2,6 +2,7 @@
 @inject NavigationManager NavigationManager
 @inject UserProfileService UserProfileService
 @inject UserSessionService UserSessionService
+@inject AuthSessionStorageService AuthSessionStorage
 @inject IJSRuntime JS
 @inject ILogger<Login> Logger
 
@@ -313,7 +314,9 @@
 
         if (result.IsAuthenticated && result.User is not null)
         {
-            UserSessionService.SignIn(result.User, result.AuthToken ?? string.Empty);
+            var authToken = result.AuthToken ?? string.Empty;
+            UserSessionService.SignIn(result.User, authToken);
+            await AuthSessionStorage.SaveTokenAsync(authToken);
             NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
             return;
         }
@@ -364,7 +367,9 @@
                 return;
             }
 
-            UserSessionService.SignIn(result.User, result.AuthToken ?? string.Empty);
+            var authToken = result.AuthToken ?? string.Empty;
+            UserSessionService.SignIn(result.User, authToken);
+            await AuthSessionStorage.SaveTokenAsync(authToken);
             NavigationManager.NavigateTo(GetReturnUrl(), replace: true);
         }
         catch (Exception exception)

@@ -1,6 +1,8 @@
 ﻿@page "/nachhilfe"
 @inject TutorDirectoryService TutorDirectoryService
 @inject UserSessionService UserSessionService
+@inject AuthSessionStorageService AuthSessionStorage
+@inject TutorRequestService TutorRequestService
 
 <PageTitle>Nachhilfe</PageTitle>
 
@@ -585,6 +587,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthSessionStorage.RestoreFromCookieAsync();
         var directoryResult = await TutorDirectoryService.GetTutorsAsync();
         AllTutors = directoryResult.Tutors;
         DirectoryMessage = directoryResult.Message ?? string.Empty;
@@ -659,14 +662,29 @@
         }
     }
 
-    private void SendTutorRequest()
+    private async Task SendTutorRequest()
     {
         if (SelectedTutor is null)
         {
             return;
         }
 
-        RequestMessage = $"Die Anfrage an {SelectedTutor.Name} ist noch nicht aktiviert.";
+        if (UserSessionService.CurrentUser is null)
+        {
+            RequestMessage = "Bitte logge dich ein, um eine Anfrage zu senden.";
+            return;
+        }
+
+        if (IsOwnTutorOffer(SelectedTutor))
+        {
+            RequestMessage = "Du kannst keine Anfrage an dein eigenes Angebot senden.";
+            return;
+        }
+
+        var result = await TutorRequestService.SendRequestAsync(UserSessionService.CurrentUser, SelectedTutor);
+        RequestMessage = result.Success
+            ? $"Deine Anfrage an {SelectedTutor.Name} wurde gesendet."
+            : result.Message ?? "Die Anfrage konnte nicht gesendet werden.";
     }
 
     private void StartEditingSelectedTutor()

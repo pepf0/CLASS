@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject DashboardDataService DashboardData
 @inject NavigationManager NavigationManager
+@inject AuthSessionStorageService AuthSessionStorage
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -177,6 +178,11 @@
     {
         get
         {
+            if (Snapshot is not null && !Snapshot.IsTestData)
+            {
+                return Snapshot.RevenueByMonth;
+            }
+
             var values = RevenueByYear.TryGetValue(SelectedRevenueYear, out var yearValues)
                 ? yearValues
                 : new decimal[12];
@@ -252,13 +258,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthSessionStorage.RestoreFromCookieAsync();
         Snapshot = await DashboardData.GetDashboardAsync();
         OpenRequests = Snapshot.OpenRequests.ToList();
         Activities = Snapshot.Activities.ToList();
         IsLoading = false;
 
-        FeedCancellation = new CancellationTokenSource();
-        _ = RefreshFeedAsync(FeedCancellation.Token);
+        if (Snapshot.IsTestData)
+        {
+            FeedCancellation = new CancellationTokenSource();
+            _ = RefreshFeedAsync(FeedCancellation.Token);
+        }
     }
 
     private void AcceptRequest(TutorRequest request)

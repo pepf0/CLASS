@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject IJSRuntime JS
+@inject AuthSessionStorageService AuthSessionStorage
 
 <nav class="navbar navbar-expand-lg custom-navbar fixed-top">
     <div class="container">
@@ -101,6 +102,11 @@
 @code {
     private bool IsSidebarOpen;
     private bool IsDarkMode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthSessionStorage.RestoreFromCookieAsync();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
