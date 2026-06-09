@@ -26,5 +26,5 @@ public sealed class ClassOfferDto
     public string Description { get; set; } = string.Empty;
 
     [JsonPropertyName("subject_ids")]
-    public string SubjectIds { get; set; } = string.Empty;
+    public string? SubjectIds { get; set; }
 }

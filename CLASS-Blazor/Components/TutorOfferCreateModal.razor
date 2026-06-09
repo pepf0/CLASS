@@ -219,13 +219,21 @@
             return;
         }
 
+        TutorOfferCreationResult result;
         IsSaving = true;
-        var result = await TutorDirectoryService.CreateTutorOfferAsync(
-            UserSessionService.CurrentUser,
-            OfferModel,
-            UserSessionService.AuthToken,
-            UserSessionService.ProfileImageUrl);
-        IsSaving = false;
+
+        try
+        {
+            result = await TutorDirectoryService.CreateTutorOfferAsync(
+                UserSessionService.CurrentUser,
+                OfferModel,
+                UserSessionService.AuthToken,
+                UserSessionService.ProfileImageUrl);
+        }
+        finally
+        {
+            IsSaving = false;
+        }
 
         if (!result.Success || result.Offer is null)
         {

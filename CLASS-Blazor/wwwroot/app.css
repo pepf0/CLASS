@@ -472,15 +472,29 @@ h1:focus {
     line-height: 1;
     cursor: pointer;
     box-shadow: var(--shadow-card);
-    transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease;
+}
+
+.tutor-add-button span {
+    display: block;
+    line-height: 1;
+    transition: transform 0.18s ease;
 }
 
 .tutor-add-button:hover,
 .tutor-add-button:focus-visible {
-    transform: translateY(-1px);
-    background: var(--color-accent);
+    transform: translateY(-2px) scale(1.04);
     border-color: var(--color-accent);
+    filter: brightness(1.04);
+    box-shadow:
+        0 18px 34px rgba(97, 0, 207, 0.22),
+        0 0 0 5px rgba(97, 0, 207, 0.12);
     outline: none;
+}
+
+.tutor-add-button:hover span,
+.tutor-add-button:focus-visible span {
+    transform: rotate(90deg);
 }
 
 .tutor-add-button-small {
@@ -948,8 +962,11 @@ h1:focus {
     position: absolute;
     top: 1.15rem;
     right: 1.15rem;
+    display: inline-grid;
+    place-items: center;
     width: 2.75rem;
     height: 2.75rem;
+    padding: 0;
     border: 1px solid var(--surface-border);
     border-radius: 999px;
     background: var(--surface-elevated);
@@ -958,6 +975,11 @@ h1:focus {
     line-height: 1;
     cursor: pointer;
     transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.tutor-modal-close span {
+    display: block;
+    line-height: 1;
 }
 
 .tutor-modal-close:hover,
@@ -1411,6 +1433,28 @@ h1:focus {
 
 .tutor-edit-metrics-section .offer-form-layout {
     margin: 0;
+}
+
+.tutor-create-modal .offer-form-field {
+    align-items: stretch;
+}
+
+.tutor-create-modal .offer-form-field label {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+}
+
+.tutor-create-modal .offer-form-input,
+.tutor-create-modal .offer-form-input-prefix-wrap,
+.tutor-create-modal .subject-selection-input-row {
+    width: 100%;
+}
+
+.tutor-create-modal .tutor-edit-actions {
+    gap: 0.85rem;
 }
 
 .tutor-edit-validation {

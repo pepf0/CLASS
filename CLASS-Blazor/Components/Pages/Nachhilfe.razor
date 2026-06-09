@@ -377,7 +377,7 @@
                                 <button type="button"
                                         class="btn-danger-custom"
                                         @onclick="DeleteSelectedTutorOffer">
-                                    @(IsDeleteConfirmationVisible ? "Wirklich loeschen?" : "Angebot loeschen")
+                                    @(IsDeleteConfirmationVisible ? "Wirklich löschen?" : "Angebot löschen")
                                 </button>
                                 <button type="button" class="btn-secondary-custom" @onclick="CancelTutorEdit">Abbrechen</button>
                                 <button type="submit" class="tutor-request-button tutor-edit-button-confirm">Speichern</button>
@@ -737,7 +737,10 @@
             return;
         }
 
-        var result = await TutorRequestService.SendRequestAsync(UserSessionService.CurrentUser, SelectedTutor);
+        var result = await TutorRequestService.SendRequestAsync(
+            UserSessionService.CurrentUser,
+            SelectedTutor,
+            UserSessionService.AuthToken);
         RequestMessage = result.Success
             ? $"Deine Anfrage an {SelectedTutor.Name} wurde gesendet."
             : result.Message ?? "Die Anfrage konnte nicht gesendet werden.";
@@ -834,7 +837,7 @@
         if (!IsDeleteConfirmationVisible)
         {
             IsDeleteConfirmationVisible = true;
-            TutorEditMessage = "Klicke erneut auf Loeschen, um dein Angebot dauerhaft zu entfernen.";
+            TutorEditMessage = "Klicke erneut auf Löschen, um dein Angebot dauerhaft zu entfernen.";
             return;
         }
 
@@ -842,7 +845,7 @@
 
         if (!result.Success)
         {
-            TutorEditMessage = result.Message ?? "Das Angebot konnte nicht geloescht werden.";
+            TutorEditMessage = result.Message ?? "Das Angebot konnte nicht gelöscht werden.";
             IsDeleteConfirmationVisible = false;
             return;
         }
@@ -850,7 +853,7 @@
         AllTutors = AllTutors
             .Where(tutor => !IsSameTutorOffer(tutor, SelectedTutor))
             .ToList();
-        DirectoryMessage = "Dein Angebot wurde geloescht.";
+        DirectoryMessage = "Dein Angebot wurde gelöscht.";
         CloseTutorDetails();
     }
 

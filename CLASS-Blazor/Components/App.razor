@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 
 <head>
     <meta charset="utf-8" />
@@ -7,7 +7,14 @@
     <base href="/" />
     <script>
         (function () {
-            var savedTheme = localStorage.getItem('site-theme');
+            var savedTheme = null;
+
+            try {
+                savedTheme = localStorage.getItem('site-theme');
+            } catch {
+                savedTheme = null;
+            }
+
             var theme = savedTheme === 'light' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();

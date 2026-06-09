@@ -200,9 +200,85 @@ public sealed class DashboardDataService(
             return true;
         }
 
-        return currentOffer is not null
-            && request.OfferId > 0
-            && currentOffer.OfferId == request.OfferId;
+        if (currentOffer is null)
+        {
+            return false;
+        }
+
+        if (request.OfferId > 0)
+        {
+            return currentOffer.OfferId == request.OfferId;
+        }
+
+        var targetOfferId = GetTargetOfferId(request.Description);
+
+        if (targetOfferId > 0)
+        {
+            return currentOffer.OfferId == targetOfferId;
+        }
+
+        return HasMatchingSubject(request.Subject, currentOffer.Subjects);
+    }
+
+    private static int GetTargetOfferId(string description)
+    {
+        const string marker = "Angebot #";
+
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return 0;
+        }
+
+        var markerIndex = description.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+
+        if (markerIndex < 0)
+        {
+            return 0;
+        }
+
+        var start = markerIndex + marker.Length;
+        var end = start;
+
+        while (end < description.Length && char.IsDigit(description[end]))
+        {
+            end++;
+        }
+
+        return end > start && int.TryParse(description[start..end], out var offerId)
+            ? offerId
+            : 0;
+    }
+
+    private static bool HasMatchingSubject(string requestSubject, IEnumerable<string> tutorSubjects)
+    {
+        if (string.IsNullOrWhiteSpace(requestSubject))
+        {
+            return false;
+        }
+
+        var requestSubjects = requestSubject
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(NormalizeSubjectKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return tutorSubjects
+            .Select(NormalizeSubjectKey)
+            .Any(requestSubjects.Contains);
+    }
+
+    private static string NormalizeSubjectKey(string subject)
+    {
+        return subject
+            .Trim()
+            .ToLowerInvariant()
+            .Normalize(System.Text.NormalizationForm.FormD)
+            .Where(character => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .Aggregate(string.Empty, (current, character) => current + character)
+            .Replace("ß", "ss", StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal);
     }
 
     private static string GetRequesterName(TutorRequestRecord request, UserProfile? requester)

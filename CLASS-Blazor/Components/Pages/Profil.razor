@@ -127,7 +127,7 @@ else if (CurrentUser is not null)
                         <button type="button"
                                 class="btn-danger-custom profile-tutor-delete-button"
                                 @onclick="DeleteTutorOffer">
-                            @(IsDeleteConfirmationVisible ? "Wirklich loeschen?" : "Loeschen")
+                            @(IsDeleteConfirmationVisible ? "Wirklich löschen?" : "Löschen")
                         </button>
                     }
                 </div>
@@ -379,7 +379,7 @@ else
         if (!IsDeleteConfirmationVisible)
         {
             IsDeleteConfirmationVisible = true;
-            TutorDeleteMessage = "Klicke erneut auf Loeschen, um dein Angebot dauerhaft zu entfernen.";
+            TutorDeleteMessage = "Klicke erneut auf Löschen, um dein Angebot dauerhaft zu entfernen.";
             return;
         }
 
@@ -387,7 +387,7 @@ else
 
         if (!result.Success)
         {
-            TutorDeleteMessage = result.Message ?? "Das Angebot konnte nicht geloescht werden.";
+            TutorDeleteMessage = result.Message ?? "Das Angebot konnte nicht gelöscht werden.";
             IsDeleteConfirmationVisible = false;
             return;
         }

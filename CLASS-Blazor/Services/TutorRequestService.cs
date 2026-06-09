@@ -1,5 +1,7 @@
 using CLASS_Blazor.Models;
+using System.Globalization;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -10,6 +12,8 @@ public sealed class TutorRequestService(
     ILogger<TutorRequestService> logger)
 {
     private const string RequestApiUrl = "request";
+    private const string SubjectApiUrl = "subject";
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -20,9 +24,14 @@ public sealed class TutorRequestService(
     {
         try
         {
-            var json = await httpClient.GetStringAsync(RequestApiUrl, cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(RequestTimeout);
 
-            return ParseRequests(json);
+            var json = await httpClient.GetStringAsync(RequestApiUrl, timeoutCts.Token);
+            var subjects = await GetSubjectsAsync(timeoutCts.Token);
+            var subjectsById = subjects.ToDictionary(subject => subject.Suid);
+
+            return ParseRequests(json, subjectsById);
         }
         catch (Exception exception)
         {
@@ -34,6 +43,7 @@ public sealed class TutorRequestService(
     public async Task<TutorRequestResult> SendRequestAsync(
         UserProfile requester,
         TutorOffer tutor,
+        string authToken,
         CancellationToken cancellationToken = default)
     {
         if (requester.Uid <= 0)
@@ -51,20 +61,48 @@ public sealed class TutorRequestService(
             return TutorRequestResult.Failed("Du kannst keine Anfrage an dein eigenes Angebot senden.");
         }
 
-        var subject = tutor.Subjects.FirstOrDefault() ?? "Nachhilfe";
-        var payload = new
+        if (string.IsNullOrWhiteSpace(authToken))
         {
-            requester_uid = requester.Uid,
-            offerer_uid = tutor.OffererUserId,
-            max_price = Math.Max(0, tutor.PricePerHour),
-            until = DateTimeOffset.UtcNow.AddMonths(1).ToString("O"),
-            subject,
-            description = $"Anfrage von {requester.FullName} für {subject} bei {tutor.Name}."
-        };
+            return TutorRequestResult.Failed("Bitte logge dich erneut ein, um eine Anfrage zu senden.");
+        }
 
         try
         {
-            using var response = await httpClient.PostAsJsonAsync(RequestApiUrl, payload, SerializerOptions, cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(RequestTimeout);
+
+            var subjects = await GetSubjectsAsync(timeoutCts.Token);
+            var normalizedSubjects = NormalizeSubjects(tutor.Subjects);
+            var subjectIds = GetSubjectIds(normalizedSubjects, subjects);
+
+            if (subjectIds.Length == 0)
+            {
+                return TutorRequestResult.Failed("Für dieses Angebot konnte kein bekanntes Fach gefunden werden.");
+            }
+
+            var subject = normalizedSubjects.FirstOrDefault() ?? "Nachhilfe";
+            var payload = new
+            {
+                requester_uid = requester.Uid,
+                max_price = Math.Max(0, tutor.PricePerHour),
+                until = FormatApiDateTime(DateTime.UtcNow.AddMonths(1)),
+                description = $"Anfrage an Angebot #{tutor.OfferId} von {tutor.Name}: {requester.FullName} fragt {subject} an.",
+                subjects = subjectIds
+            };
+
+            using var request = CreateAuthorizedRequest(HttpMethod.Post, RequestApiUrl, authToken);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return TutorRequestResult.Failed("Bitte logge dich erneut ein, um eine Anfrage zu senden.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return TutorRequestResult.Failed("Du kannst diese Anfrage nicht mit diesem Login senden.");
+            }
 
             if (response.StatusCode == HttpStatusCode.BadRequest)
             {
@@ -73,10 +111,18 @@ public sealed class TutorRequestService(
 
             if (!response.IsSuccessStatusCode)
             {
-                return TutorRequestResult.Failed($"Die Anfrage konnte nicht gesendet werden ({(int)response.StatusCode}).");
+                var apiError = await TryReadApiErrorAsync(response, timeoutCts.Token);
+                return TutorRequestResult.Failed(string.IsNullOrWhiteSpace(apiError)
+                    ? $"Die Anfrage konnte nicht gesendet werden ({(int)response.StatusCode})."
+                    : $"Die Anfrage konnte nicht gesendet werden ({(int)response.StatusCode}): {apiError}");
             }
 
             return TutorRequestResult.Sent();
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Tutor request creation timed out at {RequestApiUrl}.", RequestApiUrl);
+            return TutorRequestResult.Failed("Das Senden dauert zu lange. Bitte prüfe deine Verbindung und versuche es erneut.");
         }
         catch (Exception exception)
         {
@@ -85,7 +131,9 @@ public sealed class TutorRequestService(
         }
     }
 
-    private static IReadOnlyList<TutorRequestRecord> ParseRequests(string json)
+    private static IReadOnlyList<TutorRequestRecord> ParseRequests(
+        string json,
+        IReadOnlyDictionary<int, SubjectDto> subjectsById)
     {
         using var document = JsonDocument.Parse(json);
         var requestElements = GetArrayElements(document.RootElement);
@@ -100,7 +148,7 @@ public sealed class TutorRequestService(
                 OfferId: GetInt(element, "offer_id", "oid"),
                 RequesterName: GetString(element, "requester_name", "requesterName", "name"),
                 RequesterEmail: GetString(element, "requester_email", "requesterEmail", "email"),
-                Subject: GetString(element, "subject", "subject_name", "subjectName"),
+                Subject: GetSubjectText(element, subjectsById),
                 MaxPrice: GetInt(element, "max_price", "price_per_hour", "price"),
                 Until: GetDate(element, "until", "available_until"),
                 Description: GetString(element, "description", "message"),
@@ -109,6 +157,43 @@ public sealed class TutorRequestService(
         }
 
         return requests;
+    }
+
+    private async Task<IReadOnlyList<SubjectDto>> GetSubjectsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
+            return ParseSubjects(subjectsJson);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Subjects could not be loaded from {SubjectApiUrl}.", SubjectApiUrl);
+            return [];
+        }
+    }
+
+    private static List<SubjectDto> ParseSubjects(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<SubjectDto>>(json, SerializerOptions) ?? [];
+        }
+
+        if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("value", out var valueElement)
+            && valueElement.ValueKind == JsonValueKind.Array)
+        {
+            return JsonSerializer.Deserialize<List<SubjectDto>>(valueElement.GetRawText(), SerializerOptions) ?? [];
+        }
+
+        return [];
     }
 
     private static IReadOnlyList<JsonElement> GetArrayElements(JsonElement root)
@@ -126,6 +211,21 @@ public sealed class TutorRequestService(
         }
 
         return [];
+    }
+
+    private static string GetSubjectText(JsonElement element, IReadOnlyDictionary<int, SubjectDto> subjectsById)
+    {
+        var subject = GetString(element, "subject", "subject_name", "subjectName");
+
+        if (!string.IsNullOrWhiteSpace(subject))
+        {
+            return subject;
+        }
+
+        var subjectIds = GetString(element, "subject_ids", "subjectIds");
+        var subjects = GetSubjects(subjectIds, subjectsById);
+
+        return subjects.Length == 0 ? string.Empty : string.Join(", ", subjects);
     }
 
     private static string GetString(JsonElement element, params string[] names)
@@ -183,5 +283,141 @@ public sealed class TutorRequestService(
         }
 
         return null;
+    }
+
+    private static async Task<string> TryReadApiErrorAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return string.Empty;
+            }
+
+            using var document = JsonDocument.Parse(json);
+
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("error", out var errorElement)
+                && errorElement.ValueKind == JsonValueKind.String)
+            {
+                return errorElement.GetString() ?? string.Empty;
+            }
+
+            return json;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string[] NormalizeSubjects(IEnumerable<string> subjects)
+    {
+        return subjects
+            .Where(subject => !string.IsNullOrWhiteSpace(subject))
+            .Select(subject => subject.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string FormatApiDateTime(DateTime dateTime)
+    {
+        return dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+    }
+
+    private static int[] GetSubjectIds(IEnumerable<string> selectedSubjects, IReadOnlyList<SubjectDto> subjects)
+    {
+        return selectedSubjects
+            .Select(subject => FindSubjectId(subject, subjects))
+            .Where(subjectId => subjectId > 0)
+            .Distinct()
+            .ToArray();
+    }
+
+    private static int FindSubjectId(string selectedSubject, IReadOnlyList<SubjectDto> subjects)
+    {
+        var normalized = NormalizeSubjectKey(selectedSubject);
+        var aliasMatch = GetSubjectAliasId(normalized);
+
+        if (aliasMatch > 0 && subjects.Any(subject => subject.Suid == aliasMatch))
+        {
+            return aliasMatch;
+        }
+
+        return subjects.FirstOrDefault(subject =>
+                NormalizeSubjectKey(subject.DisplayName) == normalized
+                || NormalizeSubjectKey(subject.Name) == normalized
+                || NormalizeSubjectKey(subject.Abbreviation) == normalized
+                || NormalizeSubjectKey($"{subject.Abbreviation} {subject.Name}") == normalized)
+            ?.Suid ?? 0;
+    }
+
+    private static string NormalizeSubjectKey(string value)
+    {
+        return value
+            .Trim()
+            .ToLowerInvariant()
+            .Normalize(System.Text.NormalizationForm.FormD)
+            .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+            .Aggregate(string.Empty, (current, character) => current + character)
+            .Replace("ß", "ss", StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal);
+    }
+
+    private static int GetSubjectAliasId(string normalizedSubject)
+    {
+        return normalizedSubject switch
+        {
+            "softwareentwicklung" or "programmieren" or "coding" => 1,
+            "netzwerktechnik" or "netzwerke" or "networking" => 2,
+            "medientechnik" or "media" => 3,
+            "systemtechniket" or "etechnik" or "elektrotechnik" or "gete" => 4,
+            "systemtechnikit" or "informationstechnik" or "ginf" => 5,
+            "geographiegeschichteundpolitischebildung" or "geographie" or "geschichte" or "politischebildung" => 6,
+            "naturwissenschaften" or "naturwissenschaft" => 7,
+            "deutsch" => 8,
+            "angewandtemathematik" or "mathematik" or "mathe" or "math" => 9,
+            _ => 0
+        };
+    }
+
+    private static string[] GetSubjects(string? subjectIds, IReadOnlyDictionary<int, SubjectDto> subjectsById)
+    {
+        if (string.IsNullOrWhiteSpace(subjectIds))
+        {
+            return [];
+        }
+
+        return subjectIds
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(subjectId => GetSubjectName(subjectId, subjectsById))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string GetSubjectName(string subjectId, IReadOnlyDictionary<int, SubjectDto> subjectsById)
+    {
+        return int.TryParse(subjectId, out var parsedSubjectId)
+               && subjectsById.TryGetValue(parsedSubjectId, out var subject)
+            ? subject.DisplayName
+            : $"Fach {subjectId}";
+    }
+
+    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string requestUri, string authToken)
+    {
+        var request = new HttpRequestMessage(method, requestUri);
+
+        if (!string.IsNullOrWhiteSpace(authToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
+        }
+
+        return request;
     }
 }

@@ -1,4 +1,5 @@
 using CLASS_Blazor.Models;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -14,6 +15,7 @@ public sealed class TutorDirectoryService(
     private const string TutorApiUrl = "offer";
     private const string UserApiUrl = "user";
     private const string SubjectApiUrl = "subject";
+    private static readonly TimeSpan CreateOfferTimeout = TimeSpan.FromSeconds(15);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -74,21 +76,30 @@ public sealed class TutorDirectoryService(
 
         try
         {
-            var subjects = await GetSubjectsAsync(cancellationToken);
-            var subjectIds = GetSubjectIds(form.Subjects, subjects);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(CreateOfferTimeout);
+
+            var subjects = await GetSubjectsAsync(timeoutCts.Token);
             var normalizedSubjects = NormalizeSubjects(form.Subjects);
+            var subjectIds = GetSubjectIds(normalizedSubjects, subjects);
+
+            if (subjectIds.Length == 0)
+            {
+                return TutorOfferCreationResult.Failed(
+                    "Bitte gib mindestens ein bekanntes Fach an, z. B. SEW, NWT, MEDT, AM oder Deutsch.");
+            }
+
             var payload = new
             {
-                offerer_uid = user.Uid,
                 min_price = form.PricePerHour,
-                until = form.ExpiresOn.Value.ToDateTime(TimeOnly.MinValue).ToString("O"),
+                until = FormatApiDateTime(form.ExpiresOn.Value),
                 description = form.Description.Trim(),
-                subject_ids = string.Join(",", subjectIds)
+                subjects = subjectIds
             };
 
             using var request = CreateAuthorizedRequest(HttpMethod.Post, TutorApiUrl, authToken);
             request.Content = JsonContent.Create(payload, options: SerializerOptions);
-            using var response = await httpClient.SendAsync(request, cancellationToken);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
 
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
@@ -102,7 +113,10 @@ public sealed class TutorDirectoryService(
 
             if (!response.IsSuccessStatusCode)
             {
-                return TutorOfferCreationResult.Failed($"Das Angebot konnte nicht erstellt werden ({(int)response.StatusCode}).");
+                var apiError = await TryReadApiErrorAsync(response, timeoutCts.Token);
+                return TutorOfferCreationResult.Failed(string.IsNullOrWhiteSpace(apiError)
+                    ? $"Das Angebot konnte nicht erstellt werden ({(int)response.StatusCode})."
+                    : $"Das Angebot konnte nicht erstellt werden ({(int)response.StatusCode}): {apiError}");
             }
 
             var createdOffer = await BuildCreatedTutorOfferAsync(
@@ -113,9 +127,14 @@ public sealed class TutorDirectoryService(
                 subjectIds,
                 imageUrl,
                 subjects,
-                cancellationToken);
+                timeoutCts.Token);
 
             return TutorOfferCreationResult.Created(createdOffer);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Tutor offer creation timed out at {TutorApiUrl}.", TutorApiUrl);
+            return TutorOfferCreationResult.Failed("Das Speichern dauert zu lange. Bitte pruefe deine Verbindung und versuche es erneut.");
         }
         catch (Exception exception)
         {
@@ -136,12 +155,26 @@ public sealed class TutorDirectoryService(
 
         try
         {
-            using var request = CreateAuthorizedRequest(HttpMethod.Delete, $"{TutorApiUrl}/{offer.OfferId}", authToken);
-            using var response = await httpClient.SendAsync(request, cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(CreateOfferTimeout);
+
+            var payload = new
+            {
+                until = FormatApiDateTime(DateTime.UtcNow.AddDays(-1))
+            };
+
+            using var request = CreateAuthorizedRequest(HttpMethod.Put, $"{TutorApiUrl}/{offer.OfferId}", authToken);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
 
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                return TutorOfferDeletionResult.Failed("Bitte logge dich erneut ein, um dein Angebot zu loeschen.");
+                return TutorOfferDeletionResult.Failed("Bitte logge dich erneut ein, um dein Angebot zu löschen.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return TutorOfferDeletionResult.Failed("Du kannst nur dein eigenes Angebot löschen.");
             }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -151,15 +184,23 @@ public sealed class TutorDirectoryService(
 
             if (!response.IsSuccessStatusCode)
             {
-                return TutorOfferDeletionResult.Failed($"Das Angebot konnte nicht geloescht werden ({(int)response.StatusCode}).");
+                var apiError = await TryReadApiErrorAsync(response, timeoutCts.Token);
+                return TutorOfferDeletionResult.Failed(string.IsNullOrWhiteSpace(apiError)
+                    ? $"Das Angebot konnte nicht gelöscht werden ({(int)response.StatusCode})."
+                    : $"Das Angebot konnte nicht gelöscht werden ({(int)response.StatusCode}): {apiError}");
             }
 
             return TutorOfferDeletionResult.Deleted();
         }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Tutor offer {OfferId} deletion timed out at {TutorApiUrl}.", offer.OfferId, TutorApiUrl);
+            return TutorOfferDeletionResult.Failed("Das Löschen dauert zu lange. Bitte prüfe deine Verbindung und versuche es erneut.");
+        }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Tutor offer {OfferId} could not be deleted at {TutorApiUrl}.", offer.OfferId, TutorApiUrl);
-            return TutorOfferDeletionResult.Failed($"Das Angebot konnte nicht geloescht werden: {exception.Message}");
+            return TutorOfferDeletionResult.Failed($"Das Angebot konnte nicht gelöscht werden: {exception.Message}");
         }
     }
 
@@ -226,6 +267,10 @@ public sealed class TutorDirectoryService(
         {
             var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
             return ParseSubjects(subjectsJson);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -309,6 +354,36 @@ public sealed class TutorDirectoryService(
             : null;
     }
 
+    private static async Task<string> TryReadApiErrorAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return string.Empty;
+            }
+
+            using var document = JsonDocument.Parse(json);
+
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("error", out var errorElement)
+                && errorElement.ValueKind == JsonValueKind.String)
+            {
+                return errorElement.GetString() ?? string.Empty;
+            }
+
+            return json;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     private static string[] NormalizeSubjects(IEnumerable<string> subjects)
     {
         return subjects
@@ -316,6 +391,16 @@ public sealed class TutorDirectoryService(
             .Select(subject => subject.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string FormatApiDateTime(DateOnly date)
+    {
+        return FormatApiDateTime(date.ToDateTime(TimeOnly.MinValue));
+    }
+
+    private static string FormatApiDateTime(DateTime dateTime)
+    {
+        return dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     }
 
     private static int[] GetSubjectIds(IEnumerable<string> selectedSubjects, IReadOnlyList<SubjectDto> subjects)
@@ -329,13 +414,52 @@ public sealed class TutorDirectoryService(
 
     private static int FindSubjectId(string selectedSubject, IReadOnlyList<SubjectDto> subjects)
     {
-        var normalized = selectedSubject.Trim();
+        var normalized = NormalizeSubjectKey(selectedSubject);
+        var aliasMatch = GetSubjectAliasId(normalized);
+
+        if (aliasMatch > 0 && subjects.Any(subject => subject.Suid == aliasMatch))
+        {
+            return aliasMatch;
+        }
 
         return subjects.FirstOrDefault(subject =>
-                string.Equals(subject.DisplayName, normalized, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(subject.Name.Trim(), normalized, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(subject.Abbreviation.Trim(), normalized, StringComparison.OrdinalIgnoreCase))
+                NormalizeSubjectKey(subject.DisplayName) == normalized
+                || NormalizeSubjectKey(subject.Name) == normalized
+                || NormalizeSubjectKey(subject.Abbreviation) == normalized
+                || NormalizeSubjectKey($"{subject.Abbreviation} {subject.Name}") == normalized)
             ?.Suid ?? 0;
+    }
+
+    private static string NormalizeSubjectKey(string value)
+    {
+        return value
+            .Trim()
+            .ToLowerInvariant()
+            .Normalize(System.Text.NormalizationForm.FormD)
+            .Where(character => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .Aggregate(string.Empty, (current, character) => current + character)
+            .Replace("ß", "ss", StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal);
+    }
+
+    private static int GetSubjectAliasId(string normalizedSubject)
+    {
+        return normalizedSubject switch
+        {
+            "softwareentwicklung" or "programmieren" or "coding" => 1,
+            "netzwerktechnik" or "netzwerke" or "networking" => 2,
+            "medientechnik" or "media" => 3,
+            "systemtechniket" or "etechnik" or "elektrotechnik" or "gete" => 4,
+            "systemtechnikit" or "informationstechnik" or "ginf" => 5,
+            "geographiegeschichteundpolitischebildung" or "geographie" or "geschichte" or "politischebildung" => 6,
+            "naturwissenschaften" or "naturwissenschaft" => 7,
+            "deutsch" => 8,
+            "angewandtemathematik" or "mathematik" or "mathe" or "math" => 9,
+            _ => 0
+        };
     }
 
     private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string requestUri, string authToken)
@@ -411,7 +535,7 @@ public sealed class TutorDirectoryService(
             : "Tutor bei CLASS";
     }
 
-    private static string[] GetSubjects(string subjectIds, IReadOnlyDictionary<int, SubjectDto> subjectsById)
+    private static string[] GetSubjects(string? subjectIds, IReadOnlyDictionary<int, SubjectDto> subjectsById)
     {
         if (string.IsNullOrWhiteSpace(subjectIds))
         {

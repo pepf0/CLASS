@@ -36,7 +36,7 @@
                     <button type="button"
                             class="btn-danger-custom dashboard-delete-offer-button"
                             @onclick="DeleteTutorOffer">
-                        @(IsDeleteConfirmationVisible ? "Wirklich loeschen?" : "Angebot loeschen")
+                        @(IsDeleteConfirmationVisible ? "Wirklich löschen?" : "Angebot löschen")
                     </button>
                 }
             </div>
@@ -373,7 +373,7 @@
         if (!IsDeleteConfirmationVisible)
         {
             IsDeleteConfirmationVisible = true;
-            DeleteOfferMessage = "Klicke erneut auf Loeschen, um dein Angebot dauerhaft zu entfernen.";
+            DeleteOfferMessage = "Klicke erneut auf Löschen, um dein Angebot dauerhaft zu entfernen.";
             return;
         }
 
@@ -381,7 +381,7 @@
 
         if (!result.Success)
         {
-            DeleteOfferMessage = result.Message ?? "Das Angebot konnte nicht geloescht werden.";
+            DeleteOfferMessage = result.Message ?? "Das Angebot konnte nicht gelöscht werden.";
             IsDeleteConfirmationVisible = false;
             return;
         }
@@ -392,7 +392,7 @@
             HasOffer = false,
             ActiveOffers = 0
         };
-        DeleteOfferMessage = "Dein Angebot wurde geloescht.";
+        DeleteOfferMessage = "Dein Angebot wurde gelöscht.";
         IsDeleteConfirmationVisible = false;
     }
 
