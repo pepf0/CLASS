@@ -7,9 +7,22 @@
 <PageTitle>Nachhilfe</PageTitle>
 
 <section class="tutoring-page page-with-footer-space">
-    <div class="tutoring-header">
-        <h1>Nachhilfeangebote</h1>
-        <p>Finde passende Tutorinnen und Tutoren nach Fach, Bewertung, Preis und Gültigkeit.</p>
+    <div class="tutoring-header tutoring-header-with-action">
+        <div>
+            <h1>Nachhilfeangebote</h1>
+            <p>Finde passende Tutorinnen und Tutoren nach Fach, Bewertung, Preis und Gültigkeit.</p>
+        </div>
+
+        @if (CanCreateTutorOffer)
+        {
+            <button type="button"
+                    class="tutor-add-button"
+                    title="Nachhilfeangebot erstellen"
+                    aria-label="Nachhilfeangebot erstellen"
+                    @onclick="OpenTutorCreate">
+                <span aria-hidden="true">+</span>
+            </button>
+        }
     </div>
 
     <section class="tutor-filters" aria-label="Filter für Nachhilfeangebote">
@@ -361,6 +374,11 @@
 
                         <div class="tutor-modal-actions">
                             <div class="tutor-modal-cta tutor-edit-actions">
+                                <button type="button"
+                                        class="btn-danger-custom"
+                                        @onclick="DeleteSelectedTutorOffer">
+                                    @(IsDeleteConfirmationVisible ? "Wirklich loeschen?" : "Angebot loeschen")
+                                </button>
                                 <button type="button" class="btn-secondary-custom" @onclick="CancelTutorEdit">Abbrechen</button>
                                 <button type="submit" class="tutor-request-button tutor-edit-button-confirm">Speichern</button>
                             </div>
@@ -500,6 +518,11 @@
         </div>
     }
 
+    <TutorOfferCreateModal IsOpen="IsCreatingTutorOffer"
+                           IdPrefix="nachhilfe-create-offer"
+                           OnClosed="CloseTutorCreate"
+                           OnCreated="HandleTutorOfferCreated" />
+
 </section>
 
 @code {
@@ -536,6 +559,8 @@
 
     private bool IsEditingTutorOffer { get; set; }
 
+    private bool IsCreatingTutorOffer { get; set; }
+
     private TutorOfferFormModel TutorEditModel { get; set; } = new();
 
     private string TutorEditSubjectInput { get; set; } = string.Empty;
@@ -545,6 +570,8 @@
     private List<string> TutorEditValidationMessages { get; set; } = [];
 
     private string RequestMessage { get; set; } = string.Empty;
+
+    private bool IsDeleteConfirmationVisible { get; set; }
 
     private ElementReference TutorModalRef;
 
@@ -561,6 +588,12 @@
     private bool IsSortDescending => SelectedSortDirection == SortDirectionDescending;
 
     private DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    private bool HasActiveOwnTutorOffer =>
+        AllTutors.Any(tutor => IsOwnTutorOffer(tutor) && tutor.ExpiresOn >= Today);
+
+    private bool CanCreateTutorOffer =>
+        UserSessionService.CurrentUser is not null && !HasActiveOwnTutorOffer;
 
     private IEnumerable<string> AvailableSubjects =>
         AllTutors.SelectMany(t => t.Subjects)
@@ -625,6 +658,28 @@
         ShouldFocusTutorModal = true;
     }
 
+    private void OpenTutorCreate()
+    {
+        SelectedTutor = null;
+        IsEditingTutorOffer = false;
+        IsCreatingTutorOffer = true;
+    }
+
+    private void CloseTutorCreate()
+    {
+        IsCreatingTutorOffer = false;
+    }
+
+    private void HandleTutorOfferCreated(TutorOffer offer)
+    {
+        AllTutors = AllTutors
+            .Where(tutor => !IsSameTutorOffer(tutor, offer) || tutor.ExpiresOn < Today)
+            .Append(offer)
+            .ToList();
+        DirectoryMessage = "Dein Angebot wurde erstellt.";
+        IsCreatingTutorOffer = false;
+    }
+
     private void CloseTutorDetails()
     {
         SelectedTutor = null;
@@ -633,6 +688,7 @@
         TutorEditMessage = string.Empty;
         TutorEditSubjectInput = string.Empty;
         TutorEditValidationMessages.Clear();
+        IsDeleteConfirmationVisible = false;
         ShouldFocusTutorModal = false;
         IsDescriptionExpanded = false;
     }
@@ -705,6 +761,7 @@
         TutorEditMessage = string.Empty;
         TutorEditValidationMessages.Clear();
         RequestMessage = string.Empty;
+        IsDeleteConfirmationVisible = false;
         IsEditingTutorOffer = true;
     }
 
@@ -713,6 +770,7 @@
         IsEditingTutorOffer = false;
         TutorEditMessage = string.Empty;
         TutorEditValidationMessages.Clear();
+        IsDeleteConfirmationVisible = false;
     }
 
     private void AddTutorEditSubject()
@@ -764,6 +822,36 @@
         SelectedTutor = updatedTutor;
         TutorEditMessage = "Dein Angebot wurde für diese Sitzung gespeichert.";
         IsEditingTutorOffer = false;
+    }
+
+    private async Task DeleteSelectedTutorOffer()
+    {
+        if (SelectedTutor is null || !IsOwnTutorOffer(SelectedTutor))
+        {
+            return;
+        }
+
+        if (!IsDeleteConfirmationVisible)
+        {
+            IsDeleteConfirmationVisible = true;
+            TutorEditMessage = "Klicke erneut auf Loeschen, um dein Angebot dauerhaft zu entfernen.";
+            return;
+        }
+
+        var result = await TutorDirectoryService.DeleteTutorOfferAsync(SelectedTutor, UserSessionService.AuthToken);
+
+        if (!result.Success)
+        {
+            TutorEditMessage = result.Message ?? "Das Angebot konnte nicht geloescht werden.";
+            IsDeleteConfirmationVisible = false;
+            return;
+        }
+
+        AllTutors = AllTutors
+            .Where(tutor => !IsSameTutorOffer(tutor, SelectedTutor))
+            .ToList();
+        DirectoryMessage = "Dein Angebot wurde geloescht.";
+        CloseTutorDetails();
     }
 
     private IEnumerable<string> ValidateTutorEditModel()

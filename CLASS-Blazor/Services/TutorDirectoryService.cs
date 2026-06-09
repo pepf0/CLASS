@@ -1,4 +1,7 @@
 using CLASS_Blazor.Models;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace CLASS_Blazor.Services;
@@ -49,6 +52,114 @@ public sealed class TutorDirectoryService(
                 [],
                 LoadedFromApi: false,
                 Message: $"Die API konnte nicht erreicht werden: {exception.Message}");
+        }
+    }
+
+    public async Task<TutorOfferCreationResult> CreateTutorOfferAsync(
+        UserProfile user,
+        TutorOfferFormModel form,
+        string authToken,
+        string imageUrl,
+        CancellationToken cancellationToken = default)
+    {
+        if (user.Uid <= 0)
+        {
+            return TutorOfferCreationResult.Failed("Du musst eingeloggt sein, um ein Angebot zu erstellen.");
+        }
+
+        if (!form.ExpiresOn.HasValue)
+        {
+            return TutorOfferCreationResult.Failed("Bitte gib ein Gueltigkeitsdatum an.");
+        }
+
+        try
+        {
+            var subjects = await GetSubjectsAsync(cancellationToken);
+            var subjectIds = GetSubjectIds(form.Subjects, subjects);
+            var normalizedSubjects = NormalizeSubjects(form.Subjects);
+            var payload = new
+            {
+                offerer_uid = user.Uid,
+                min_price = form.PricePerHour,
+                until = form.ExpiresOn.Value.ToDateTime(TimeOnly.MinValue).ToString("O"),
+                description = form.Description.Trim(),
+                subject_ids = string.Join(",", subjectIds)
+            };
+
+            using var request = CreateAuthorizedRequest(HttpMethod.Post, TutorApiUrl, authToken);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return TutorOfferCreationResult.Failed("Bitte logge dich erneut ein, um dein Angebot zu erstellen.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.BadRequest)
+            {
+                return TutorOfferCreationResult.Failed("Das Angebot konnte mit diesen Daten nicht gespeichert werden.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return TutorOfferCreationResult.Failed($"Das Angebot konnte nicht erstellt werden ({(int)response.StatusCode}).");
+            }
+
+            var createdOffer = await BuildCreatedTutorOfferAsync(
+                response,
+                user,
+                form,
+                normalizedSubjects,
+                subjectIds,
+                imageUrl,
+                subjects,
+                cancellationToken);
+
+            return TutorOfferCreationResult.Created(createdOffer);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Tutor offer could not be created at {TutorApiUrl}.", TutorApiUrl);
+            return TutorOfferCreationResult.Failed($"Das Angebot konnte nicht erstellt werden: {exception.Message}");
+        }
+    }
+
+    public async Task<TutorOfferDeletionResult> DeleteTutorOfferAsync(
+        TutorOffer offer,
+        string authToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (offer.OfferId <= 0)
+        {
+            return TutorOfferDeletionResult.Failed("Das Angebot konnte keiner API-ID zugeordnet werden.");
+        }
+
+        try
+        {
+            using var request = CreateAuthorizedRequest(HttpMethod.Delete, $"{TutorApiUrl}/{offer.OfferId}", authToken);
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return TutorOfferDeletionResult.Failed("Bitte logge dich erneut ein, um dein Angebot zu loeschen.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return TutorOfferDeletionResult.Failed("Das Angebot wurde nicht gefunden.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return TutorOfferDeletionResult.Failed($"Das Angebot konnte nicht geloescht werden ({(int)response.StatusCode}).");
+            }
+
+            return TutorOfferDeletionResult.Deleted();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Tutor offer {OfferId} could not be deleted at {TutorApiUrl}.", offer.OfferId, TutorApiUrl);
+            return TutorOfferDeletionResult.Failed($"Das Angebot konnte nicht geloescht werden: {exception.Message}");
         }
     }
 
@@ -109,6 +220,136 @@ public sealed class TutorDirectoryService(
         return [];
     }
 
+    private async Task<IReadOnlyList<SubjectDto>> GetSubjectsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
+            return ParseSubjects(subjectsJson);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Subjects could not be loaded from {SubjectApiUrl}.", SubjectApiUrl);
+            return [];
+        }
+    }
+
+    private async Task<TutorOffer> BuildCreatedTutorOfferAsync(
+        HttpResponseMessage response,
+        UserProfile user,
+        TutorOfferFormModel form,
+        string[] normalizedSubjects,
+        int[] subjectIds,
+        string imageUrl,
+        IReadOnlyList<SubjectDto> subjects,
+        CancellationToken cancellationToken)
+    {
+        var createdDto = await TryReadCreatedOfferAsync(response, cancellationToken);
+        var subjectsById = subjects.ToDictionary(subject => subject.Suid);
+
+        return new TutorOffer(
+            Name: string.IsNullOrWhiteSpace(user.FullName) ? user.Email.Trim() : user.FullName,
+            Age: GetAge(user.BirthDate),
+            Email: user.Email.Trim(),
+            Description: form.Description.Trim(),
+            SchoolInfo: GetSchoolInfo(user),
+            Subjects: createdDto is null
+                ? normalizedSubjects
+                : GetCreatedOfferSubjects(createdDto, normalizedSubjects, subjectIds, subjectsById),
+            Rating: ConvertRating(user.Rating),
+            ReviewCount: GetReviewCount(user.Rating),
+            PricePerHour: createdDto?.MinPrice ?? form.PricePerHour,
+            ExpiresOn: createdDto is null ? form.ExpiresOn!.Value : GetExpiryDate(createdDto.Until),
+            ImageUrl: imageUrl,
+            OffererUserId: createdDto?.OffererUid > 0 ? createdDto.OffererUid : user.Uid,
+            OfferId: createdDto?.Oid ?? 0);
+    }
+
+    private static string[] GetCreatedOfferSubjects(
+        ClassOfferDto createdDto,
+        string[] normalizedSubjects,
+        int[] subjectIds,
+        IReadOnlyDictionary<int, SubjectDto> subjectsById)
+    {
+        var createdSubjectIds = string.IsNullOrWhiteSpace(createdDto.SubjectIds)
+            ? string.Join(",", subjectIds)
+            : createdDto.SubjectIds;
+        var createdSubjects = GetSubjects(createdSubjectIds, subjectsById);
+
+        return createdSubjects.Length == 0 ? normalizedSubjects : createdSubjects;
+    }
+
+    private static async Task<ClassOfferDto?> TryReadCreatedOfferAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (response.Content.Headers.ContentLength == 0)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(json);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("value", out var valueElement)
+            && valueElement.ValueKind == JsonValueKind.Object)
+        {
+            return JsonSerializer.Deserialize<ClassOfferDto>(valueElement.GetRawText(), SerializerOptions);
+        }
+
+        return document.RootElement.ValueKind == JsonValueKind.Object
+            ? JsonSerializer.Deserialize<ClassOfferDto>(json, SerializerOptions)
+            : null;
+    }
+
+    private static string[] NormalizeSubjects(IEnumerable<string> subjects)
+    {
+        return subjects
+            .Where(subject => !string.IsNullOrWhiteSpace(subject))
+            .Select(subject => subject.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static int[] GetSubjectIds(IEnumerable<string> selectedSubjects, IReadOnlyList<SubjectDto> subjects)
+    {
+        return selectedSubjects
+            .Select(subject => FindSubjectId(subject, subjects))
+            .Where(subjectId => subjectId > 0)
+            .Distinct()
+            .ToArray();
+    }
+
+    private static int FindSubjectId(string selectedSubject, IReadOnlyList<SubjectDto> subjects)
+    {
+        var normalized = selectedSubject.Trim();
+
+        return subjects.FirstOrDefault(subject =>
+                string.Equals(subject.DisplayName, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(subject.Name.Trim(), normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(subject.Abbreviation.Trim(), normalized, StringComparison.OrdinalIgnoreCase))
+            ?.Suid ?? 0;
+    }
+
+    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string requestUri, string authToken)
+    {
+        var request = new HttpRequestMessage(method, requestUri);
+
+        if (!string.IsNullOrWhiteSpace(authToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
+        }
+
+        return request;
+    }
+
     private IReadOnlyList<TutorOffer> BuildTutorsFromApi(
         IEnumerable<ClassOfferDto> apiOffers,
         IReadOnlyDictionary<int, UserProfile> usersById,
@@ -131,7 +372,8 @@ public sealed class TutorDirectoryService(
                     PricePerHour: Math.Max(0, apiOffer.MinPrice),
                     ExpiresOn: GetExpiryDate(apiOffer.Until),
                     ImageUrl: profileImageStorageService.GetProfileImageUrl(apiOffer.OffererUid),
-                    OffererUserId: apiOffer.OffererUid);
+                    OffererUserId: apiOffer.OffererUid,
+                    OfferId: apiOffer.Oid);
             })
             .Where(tutor => !string.IsNullOrWhiteSpace(tutor.Name))
             .ToList();
@@ -220,5 +462,36 @@ public sealed class TutorDirectoryService(
     private static int GetReviewCount(int rating)
     {
         return rating <= 0 ? 0 : Math.Max(1, rating / 10);
+    }
+}
+
+public sealed record TutorOfferCreationResult(
+    TutorOffer? Offer,
+    bool Success,
+    string? Message)
+{
+    public static TutorOfferCreationResult Created(TutorOffer offer)
+    {
+        return new(offer, Success: true, Message: null);
+    }
+
+    public static TutorOfferCreationResult Failed(string message)
+    {
+        return new(Offer: null, Success: false, message);
+    }
+}
+
+public sealed record TutorOfferDeletionResult(
+    bool Success,
+    string? Message)
+{
+    public static TutorOfferDeletionResult Deleted()
+    {
+        return new(Success: true, Message: null);
+    }
+
+    public static TutorOfferDeletionResult Failed(string message)
+    {
+        return new(Success: false, message);
     }
 }

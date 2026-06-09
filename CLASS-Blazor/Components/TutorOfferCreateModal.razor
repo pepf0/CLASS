@@ -1,0 +1,357 @@
+@inject TutorDirectoryService TutorDirectoryService
+@inject UserSessionService UserSessionService
+
+@if (IsOpen)
+{
+    <div class="tutor-modal-overlay" @onclick="CloseAsync">
+        <section class="tutor-modal tutor-edit-modal tutor-create-modal"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="@TitleId"
+                 tabindex="-1"
+                 @ref="ModalRef"
+                 @onkeydown="HandleModalKeyDown"
+                 @onclick:stopPropagation="true">
+            <button type="button"
+                    class="tutor-modal-close"
+                    @onclick="CloseAsync"
+                    aria-label="Popup schliessen">
+                <span aria-hidden="true">&times;</span>
+            </button>
+
+            <EditForm Model="OfferModel" OnSubmit="SubmitAsync" class="tutor-edit-form">
+                <div class="tutor-modal-header">
+                    <div class="tutor-modal-image tutor-create-image" role="img" aria-label="Neues Nachhilfeangebot">
+                        <span aria-hidden="true">+</span>
+                    </div>
+
+                    <div class="tutor-modal-header-content">
+                        <div class="tutor-modal-intro">
+                            <p class="tutor-modal-kicker">Tutorprofil</p>
+                            <h2 id="@TitleId">Nachhilfeangebot erstellen</h2>
+                            <p class="tutor-edit-subtitle">Lege Preis, F&auml;cher, Beschreibung und G&uuml;ltigkeit deines sichtbaren Angebots fest.</p>
+                            @if (UserSessionService.CurrentUser is not null)
+                            {
+                                <p class="tutor-modal-school">@UserSessionService.CurrentUser.FullName</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tutor-modal-body">
+                    <section class="tutor-modal-section tutor-edit-metrics-section">
+                        <div class="offer-form-layout">
+                            <div class="offer-form-field">
+                                <label for="@PriceInputId">Preis pro Stunde</label>
+                                <div class="offer-form-input-prefix-wrap">
+                                    <span class="offer-form-input-prefix">EUR</span>
+                                    <InputNumber id="@PriceInputId"
+                                                 class="offer-form-input offer-form-input-with-prefix"
+                                                 min="5"
+                                                 max="100"
+                                                 placeholder="15"
+                                                 @bind-Value="OfferModel.PricePerHour" />
+                                </div>
+                            </div>
+
+                            <div class="offer-form-field">
+                                <label for="@ExpiresInputId">G&uuml;ltig bis</label>
+                                <InputDate id="@ExpiresInputId"
+                                           class="offer-form-input"
+                                           placeholder="TT.MM.JJJJ"
+                                           @bind-Value="OfferModel.ExpiresOn" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="tutor-modal-section">
+                        <div class="offer-form-field">
+                            <label for="@DescriptionInputId">Beschreibung</label>
+                            <InputTextArea id="@DescriptionInputId"
+                                           class="offer-form-input offer-form-textarea"
+                                           placeholder="Beschreibe kurz, wobei du helfen kannst."
+                                           @bind-Value="OfferModel.Description" />
+                        </div>
+                    </section>
+
+                    <section class="tutor-modal-section">
+                        <div class="offer-form-field">
+                            <label for="@SubjectInputId">Angebotene F&auml;cher</label>
+                            <div class="subject-selection-list">
+                                @foreach (var subject in OfferModel.Subjects)
+                                {
+                                    <button type="button"
+                                            class="subject-selection-tag"
+                                            title="@($"{subject} entfernen")"
+                                            @onclick="() => RemoveSubject(subject)">
+                                        <span class="subject-selection-tag-label">@subject</span>
+                                        <span class="subject-selection-tag-remove" aria-hidden="true">&times;</span>
+                                    </button>
+                                }
+                            </div>
+
+                            <div class="subject-selection-input-row">
+                                <input id="@SubjectInputId"
+                                       class="offer-form-input"
+                                       placeholder="z. B. Mathematik"
+                                       value="@SubjectInput"
+                                       @oninput="HandleSubjectInput"
+                                       @onkeydown="HandleSubjectInputKeyDown" />
+                                <button type="button"
+                                        class="subject-selection-add-button"
+                                        @onclick="AddSubject">
+                                    Fach hinzuf&uuml;gen
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(FormMessage))
+                {
+                    <p class="offer-form-success">@FormMessage</p>
+                }
+
+                @if (ValidationMessages.Count > 0)
+                {
+                    <ul class="tutor-edit-validation">
+                        @foreach (var message in ValidationMessages)
+                        {
+                            <li>@message</li>
+                        }
+                    </ul>
+                }
+
+                <div class="tutor-modal-actions">
+                    <div class="tutor-modal-cta tutor-edit-actions">
+                        <button type="button" class="btn-secondary-custom" @onclick="CloseAsync" disabled="@IsSaving">Abbrechen</button>
+                        <button type="submit" class="tutor-request-button tutor-edit-button-confirm" disabled="@IsSaving">
+                            @(IsSaving ? "Wird gespeichert" : "Erstellen")
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback OnClosed { get; set; }
+
+    [Parameter]
+    public EventCallback<TutorOffer> OnCreated { get; set; }
+
+    [Parameter]
+    public string IdPrefix { get; set; } = "tutor-create";
+
+    private TutorOfferFormModel OfferModel { get; set; } = CreateDefaultModel();
+
+    private string SubjectInput { get; set; } = string.Empty;
+
+    private string FormMessage { get; set; } = string.Empty;
+
+    private List<string> ValidationMessages { get; set; } = [];
+
+    private ElementReference ModalRef;
+
+    private bool ShouldFocusModal { get; set; }
+
+    private bool WasOpen { get; set; }
+
+    private bool IsSaving { get; set; }
+
+    private bool ShouldAddSubjectOnSubmit { get; set; }
+
+    private string TitleId => $"{IdPrefix}-title";
+
+    private string PriceInputId => $"{IdPrefix}-price";
+
+    private string ExpiresInputId => $"{IdPrefix}-expires";
+
+    private string DescriptionInputId => $"{IdPrefix}-description";
+
+    private string SubjectInputId => $"{IdPrefix}-subject";
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !WasOpen)
+        {
+            ResetForm();
+            ShouldFocusModal = true;
+        }
+
+        WasOpen = IsOpen;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (ShouldFocusModal && IsOpen)
+        {
+            ShouldFocusModal = false;
+            await ModalRef.FocusAsync();
+        }
+    }
+
+    private async Task SubmitAsync(EditContext editContext)
+    {
+        if (ShouldAddSubjectOnSubmit)
+        {
+            ShouldAddSubjectOnSubmit = false;
+            AddSubject();
+            return;
+        }
+
+        ValidationMessages = ValidateOfferModel().ToList();
+        FormMessage = string.Empty;
+
+        if (ValidationMessages.Count > 0)
+        {
+            return;
+        }
+
+        if (UserSessionService.CurrentUser is null)
+        {
+            ValidationMessages.Add("Bitte logge dich ein, um ein Angebot zu erstellen.");
+            return;
+        }
+
+        IsSaving = true;
+        var result = await TutorDirectoryService.CreateTutorOfferAsync(
+            UserSessionService.CurrentUser,
+            OfferModel,
+            UserSessionService.AuthToken,
+            UserSessionService.ProfileImageUrl);
+        IsSaving = false;
+
+        if (!result.Success || result.Offer is null)
+        {
+            ValidationMessages.Add(result.Message ?? "Das Angebot konnte nicht erstellt werden.");
+            return;
+        }
+
+        FormMessage = "Dein Angebot wurde erstellt.";
+        await OnCreated.InvokeAsync(result.Offer);
+        await CloseAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        if (IsSaving)
+        {
+            return;
+        }
+
+        await OnClosed.InvokeAsync();
+    }
+
+    private async Task HandleModalKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            await CloseAsync();
+        }
+    }
+
+    private void HandleSubjectInput(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString() ?? string.Empty;
+
+        if (!value.Contains(','))
+        {
+            SubjectInput = value;
+            return;
+        }
+
+        var parts = value.Split(',', StringSplitOptions.TrimEntries);
+
+        foreach (var subject in parts[..^1])
+        {
+            AddSubjectValue(subject);
+        }
+
+        SubjectInput = parts[^1];
+    }
+
+    private void HandleSubjectInputKeyDown(KeyboardEventArgs args)
+    {
+        if ((args.Key is "Enter" or "NumpadEnter") && !string.IsNullOrWhiteSpace(SubjectInput))
+        {
+            ShouldAddSubjectOnSubmit = true;
+        }
+    }
+
+    private void AddSubject()
+    {
+        AddSubjectValue(SubjectInput);
+        SubjectInput = string.Empty;
+    }
+
+    private void AddSubjectValue(string value)
+    {
+        var subject = value.Trim();
+
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            return;
+        }
+
+        if (!OfferModel.Subjects.Contains(subject, StringComparer.OrdinalIgnoreCase))
+        {
+            OfferModel.Subjects.Add(subject);
+        }
+    }
+
+    private void RemoveSubject(string subject)
+    {
+        OfferModel.Subjects.RemoveAll(value => string.Equals(value, subject, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private IEnumerable<string> ValidateOfferModel()
+    {
+        if (string.IsNullOrWhiteSpace(OfferModel.Description) || OfferModel.Description.Trim().Length < 24)
+        {
+            yield return "Die Beschreibung muss mindestens 24 Zeichen lang sein.";
+        }
+
+        if (OfferModel.PricePerHour is < 5 or > 100)
+        {
+            yield return "Bitte gib einen Preis zwischen 5 und 100 EUR an.";
+        }
+
+        if (OfferModel.Subjects.Count == 0)
+        {
+            yield return "Bitte gib mindestens ein Fach an.";
+        }
+
+        if (!OfferModel.ExpiresOn.HasValue)
+        {
+            yield return "Bitte gib ein Gueltigkeitsdatum an.";
+        }
+        else if (OfferModel.ExpiresOn.Value < DateOnly.FromDateTime(DateTime.Today))
+        {
+            yield return "Das Gueltigkeitsdatum darf nicht in der Vergangenheit liegen.";
+        }
+    }
+
+    private void ResetForm()
+    {
+        OfferModel = CreateDefaultModel();
+        SubjectInput = string.Empty;
+        FormMessage = string.Empty;
+        ValidationMessages.Clear();
+        IsSaving = false;
+    }
+
+    private static TutorOfferFormModel CreateDefaultModel()
+    {
+        return new TutorOfferFormModel
+        {
+            PricePerHour = 15,
+            ExpiresOn = DateOnly.FromDateTime(DateTime.Today.AddMonths(3))
+        };
+    }
+}

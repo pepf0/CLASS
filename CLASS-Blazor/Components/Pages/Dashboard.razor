@@ -3,6 +3,8 @@
 @inject DashboardDataService DashboardData
 @inject NavigationManager NavigationManager
 @inject AuthSessionStorageService AuthSessionStorage
+@inject TutorDirectoryService TutorDirectoryService
+@inject UserSessionService UserSessionService
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -23,11 +25,27 @@
                 <p>Anfragen, Umsatz und gebuchte Stunden auf einen Blick.</p>
             </div>
 
-            <button type="button" class="dashboard-quick-action" @onclick="GoToOffer">
-                <span>@(Snapshot.HasOffer ? "Angebot bearbeiten" : "Angebot erstellen")</span>
-                <small>@(Snapshot.HasOffer ? "Profil aktualisieren" : "Profil vervollst&auml;ndigen")</small>
-            </button>
+            <div class="dashboard-header-actions">
+                <button type="button" class="dashboard-quick-action" @onclick="GoToOffer">
+                    <span>@(Snapshot.HasOffer ? "Angebot bearbeiten" : "Angebot erstellen")</span>
+                    <small>@(Snapshot.HasOffer ? "Profil aktualisieren" : "Profil vervollst&auml;ndigen")</small>
+                </button>
+
+                @if (Snapshot.HasOffer)
+                {
+                    <button type="button"
+                            class="btn-danger-custom dashboard-delete-offer-button"
+                            @onclick="DeleteTutorOffer">
+                        @(IsDeleteConfirmationVisible ? "Wirklich loeschen?" : "Angebot loeschen")
+                    </button>
+                }
+            </div>
         </header>
+
+        @if (!string.IsNullOrWhiteSpace(DeleteOfferMessage))
+        {
+            <p class="dashboard-offer-message">@DeleteOfferMessage</p>
+        }
 
         <section class="dashboard-summary-grid" aria-label="Dashboard Zusammenfassung">
             <div class="dashboard-summary-stack">
@@ -166,6 +184,12 @@
 
     private List<DashboardActivity> Activities { get; set; } = new();
 
+    private TutorOffer? CurrentTutorOffer { get; set; }
+
+    private string DeleteOfferMessage { get; set; } = string.Empty;
+
+    private bool IsDeleteConfirmationVisible { get; set; }
+
     private CancellationTokenSource? FeedCancellation { get; set; }
 
     private bool IsLoading { get; set; } = true;
@@ -260,6 +284,7 @@
     {
         await AuthSessionStorage.RestoreFromCookieAsync();
         Snapshot = await DashboardData.GetDashboardAsync();
+        CurrentTutorOffer = await GetCurrentTutorOfferAsync();
         OpenRequests = Snapshot.OpenRequests.ToList();
         Activities = Snapshot.Activities.ToList();
         IsLoading = false;
@@ -327,6 +352,65 @@
     private void GoToOffer()
     {
         NavigationManager.NavigateTo("/profil");
+    }
+
+    private async Task DeleteTutorOffer()
+    {
+        if (Snapshot is null)
+        {
+            return;
+        }
+
+        CurrentTutorOffer ??= await GetCurrentTutorOfferAsync();
+
+        if (CurrentTutorOffer is null)
+        {
+            DeleteOfferMessage = "Das Angebot konnte nicht gefunden werden.";
+            IsDeleteConfirmationVisible = false;
+            return;
+        }
+
+        if (!IsDeleteConfirmationVisible)
+        {
+            IsDeleteConfirmationVisible = true;
+            DeleteOfferMessage = "Klicke erneut auf Loeschen, um dein Angebot dauerhaft zu entfernen.";
+            return;
+        }
+
+        var result = await TutorDirectoryService.DeleteTutorOfferAsync(CurrentTutorOffer, UserSessionService.AuthToken);
+
+        if (!result.Success)
+        {
+            DeleteOfferMessage = result.Message ?? "Das Angebot konnte nicht geloescht werden.";
+            IsDeleteConfirmationVisible = false;
+            return;
+        }
+
+        CurrentTutorOffer = null;
+        Snapshot = Snapshot with
+        {
+            HasOffer = false,
+            ActiveOffers = 0
+        };
+        DeleteOfferMessage = "Dein Angebot wurde geloescht.";
+        IsDeleteConfirmationVisible = false;
+    }
+
+    private async Task<TutorOffer?> GetCurrentTutorOfferAsync()
+    {
+        var currentUser = UserSessionService.CurrentUser;
+
+        if (currentUser is null)
+        {
+            return null;
+        }
+
+        var tutorsResult = await TutorDirectoryService.GetTutorsAsync();
+
+        return tutorsResult.Tutors.FirstOrDefault(tutor =>
+            tutor.ExpiresOn >= DateOnly.FromDateTime(DateTime.Today)
+            && (tutor.OffererUserId == currentUser.Uid
+                || string.Equals(tutor.Email, currentUser.Email, StringComparison.OrdinalIgnoreCase)));
     }
 
     private void ShowPreviousRevenueYear()

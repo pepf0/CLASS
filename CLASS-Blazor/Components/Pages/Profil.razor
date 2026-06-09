@@ -111,6 +111,25 @@ else if (CurrentUser is not null)
                         <p class="profile-kicker">Tutor-Profil</p>
                         <h2 id="profile-tutor-heading">@GetTutorPanelTitle()</h2>
                     </div>
+
+                    @if (CanCreateTutorOffer)
+                    {
+                        <button type="button"
+                                class="tutor-add-button tutor-add-button-small"
+                                title="Nachhilfeangebot erstellen"
+                                aria-label="Nachhilfeangebot erstellen"
+                                @onclick="OpenTutorCreate">
+                            <span aria-hidden="true">+</span>
+                        </button>
+                    }
+                    else if (CurrentTutorOffer is not null)
+                    {
+                        <button type="button"
+                                class="btn-danger-custom profile-tutor-delete-button"
+                                @onclick="DeleteTutorOffer">
+                            @(IsDeleteConfirmationVisible ? "Wirklich loeschen?" : "Loeschen")
+                        </button>
+                    }
                 </div>
 
                 @if (IsTutorLoading)
@@ -156,6 +175,11 @@ else if (CurrentUser is not null)
                     </div>
 
                     <p class="profile-tutor-description">@CurrentTutorOffer.Description</p>
+
+                    @if (!string.IsNullOrWhiteSpace(TutorDeleteMessage))
+                    {
+                        <p class="profile-save-message profile-delete-message">@TutorDeleteMessage</p>
+                    }
                 }
                 else
                 {
@@ -170,6 +194,11 @@ else if (CurrentUser is not null)
                 }
             </aside>
         </div>
+
+        <TutorOfferCreateModal IsOpen="IsCreatingTutorOffer"
+                               IdPrefix="profile-create-offer"
+                               OnClosed="CloseTutorCreate"
+                               OnCreated="HandleTutorOfferCreated" />
     </section>
 }
 else
@@ -191,13 +220,21 @@ else
 
     private bool IsLoading = true;
     private bool IsTutorLoading;
+    private bool IsCreatingTutorOffer;
     private UserProfile? CurrentUser;
     private TutorOffer? CurrentTutorOffer;
     private string ProfileImageUploadMessage { get; set; } = string.Empty;
     private string ProfileSaveMessage { get; set; } = string.Empty;
     private string TutorLoadMessage { get; set; } = string.Empty;
+    private string TutorDeleteMessage { get; set; } = string.Empty;
+    private bool IsDeleteConfirmationVisible { get; set; }
 
     private bool HasProfileImage => !string.IsNullOrWhiteSpace(UserSessionService.ProfileImageUrl);
+
+    private DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    private bool CanCreateTutorOffer =>
+        CurrentUser is not null && CurrentTutorOffer is null && !IsTutorLoading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -220,8 +257,8 @@ else
         IsTutorLoading = true;
 
         var tutorResult = await TutorDirectoryService.GetTutorsAsync();
-        CurrentTutorOffer = tutorResult.Tutors.FirstOrDefault(IsCurrentUserTutorOffer);
-        TutorLoadMessage = tutorResult.Message ?? string.Empty;
+        CurrentTutorOffer = tutorResult.Tutors.FirstOrDefault(tutor => IsCurrentUserTutorOffer(tutor) && tutor.ExpiresOn >= Today);
+        TutorLoadMessage = IsApiLoadedCountMessage(tutorResult.Message) ? string.Empty : tutorResult.Message ?? string.Empty;
         IsTutorLoading = false;
     }
 
@@ -303,6 +340,61 @@ else
         }
 
         return string.Equals(tutor.Email, CurrentUser.Email, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsApiLoadedCountMessage(string? message)
+    {
+        return !string.IsNullOrWhiteSpace(message)
+            && message.Contains("Nachhilfeangebote wurden aus der API geladen.", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OpenTutorCreate()
+    {
+        TutorDeleteMessage = string.Empty;
+        IsDeleteConfirmationVisible = false;
+        IsCreatingTutorOffer = true;
+    }
+
+    private void CloseTutorCreate()
+    {
+        IsCreatingTutorOffer = false;
+    }
+
+    private void HandleTutorOfferCreated(TutorOffer offer)
+    {
+        CurrentTutorOffer = offer;
+        TutorLoadMessage = string.Empty;
+        TutorDeleteMessage = string.Empty;
+        IsDeleteConfirmationVisible = false;
+        IsCreatingTutorOffer = false;
+    }
+
+    private async Task DeleteTutorOffer()
+    {
+        if (CurrentTutorOffer is null)
+        {
+            return;
+        }
+
+        if (!IsDeleteConfirmationVisible)
+        {
+            IsDeleteConfirmationVisible = true;
+            TutorDeleteMessage = "Klicke erneut auf Loeschen, um dein Angebot dauerhaft zu entfernen.";
+            return;
+        }
+
+        var result = await TutorDirectoryService.DeleteTutorOfferAsync(CurrentTutorOffer, UserSessionService.AuthToken);
+
+        if (!result.Success)
+        {
+            TutorDeleteMessage = result.Message ?? "Das Angebot konnte nicht geloescht werden.";
+            IsDeleteConfirmationVisible = false;
+            return;
+        }
+
+        CurrentTutorOffer = null;
+        TutorDeleteMessage = string.Empty;
+        IsDeleteConfirmationVisible = false;
     }
 
     private string GetTutorPanelTitle()
