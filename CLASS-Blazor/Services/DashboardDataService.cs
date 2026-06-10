@@ -1,5 +1,6 @@
 using CLASS_Blazor.Models;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CLASS_Blazor.Services;
 
@@ -9,9 +10,13 @@ public sealed class DashboardDataService(
     UserProfileService userProfileService,
     TutorDirectoryService tutorDirectoryService,
     TutorRequestService tutorRequestService,
+    TutorRequestStatusOverlayService requestStatusOverlay,
+    IMemoryCache cache,
     ILogger<DashboardDataService> logger)
 {
     private const string SessionApiUrl = "session";
+    private const string SessionsCacheKey = "class:sessions";
+    private static readonly TimeSpan SessionsCacheDuration = TimeSpan.FromSeconds(30);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -42,19 +47,27 @@ public sealed class DashboardDataService(
             return GetEmptyDashboard(hasOffer: false);
         }
 
-        var tutorsResult = await tutorDirectoryService.GetTutorsAsync(cancellationToken);
+        var tutorsTask = tutorDirectoryService.GetTutorsAsync(cancellationToken);
+        var requestsTask = tutorRequestService.GetRequestsAsync(cancellationToken);
+        var usersTask = userProfileService.GetUsersAsync(cancellationToken);
+        var sessionsTask = GetSessionsAsync(cancellationToken);
+
+        await Task.WhenAll(tutorsTask, requestsTask, usersTask, sessionsTask);
+
+        var tutorsResult = await tutorsTask;
         var currentOffer = tutorsResult.Tutors.FirstOrDefault(tutor =>
             tutor.OffererUserId == currentUser.Uid
             || string.Equals(tutor.Email, currentUser.Email, StringComparison.OrdinalIgnoreCase));
-        var requests = await tutorRequestService.GetRequestsAsync(cancellationToken);
-        var usersResult = await userProfileService.GetUsersAsync(cancellationToken);
+        var requests = ApplyRequestStatusOverlays(await requestsTask);
+        var usersResult = await usersTask;
         var usersById = usersResult.Users.ToDictionary(user => user.Uid);
-        var sessions = await GetSessionsAsync(cancellationToken);
+        var sessions = await sessionsTask;
         var tutorSessions = sessions
             .Where(session => session.TutorUserId == currentUser.Uid)
             .ToList();
-        var receivedRequests = GetReceivedRequests(requests, currentUser, currentOffer, usersById);
-        var activities = BuildActivities(receivedRequests, tutorSessions);
+        tutorSessions.AddRange(BuildAcceptedRequestSessions(requests, currentUser, currentOffer));
+        var dashboardRequests = GetDashboardRequests(requests, currentUser, currentOffer, tutorsResult.Tutors, usersById);
+        var activities = BuildActivities(requests, currentUser, currentOffer, tutorsResult.Tutors, usersById, tutorSessions);
         var completedSessions = tutorSessions
             .Where(session => IsCompletedStatus(session.Status))
             .ToList();
@@ -71,7 +84,7 @@ public sealed class DashboardDataService(
             RevenueByMonth: BuildMonthlyChart(completedSessions, session => session.Revenue),
             HoursByMonth: BuildMonthlyChart(tutorSessions, session => session.Hours),
             SubjectHours: BuildSubjectHours(completedSessions),
-            OpenRequests: receivedRequests,
+            OpenRequests: dashboardRequests,
             Activities: activities,
             IsTestData: false);
     }
@@ -124,9 +137,9 @@ public sealed class DashboardDataService(
             ],
             OpenRequests:
             [
-                new(Guid.NewGuid(), "Mira Novak", "INSY", 18, DateOnly.FromDateTime(DateTime.Today.AddDays(-1))),
-                new(Guid.NewGuid(), "Jonas Berger", "MEDT", 20, DateOnly.FromDateTime(DateTime.Today.AddDays(-2))),
-                new(Guid.NewGuid(), "Aylin Demir", "Deutsch", 16, DateOnly.FromDateTime(DateTime.Today.AddDays(-3)))
+                new(Guid.NewGuid(), 101, TutorRequestDirection.Incoming, TutorRequestStatus.Open, "Mira Novak", "INSY", 18, DateOnly.FromDateTime(DateTime.Today.AddDays(-1))),
+                new(Guid.NewGuid(), 102, TutorRequestDirection.Outgoing, TutorRequestStatus.Open, "Jonas Berger", "MEDT", 20, DateOnly.FromDateTime(DateTime.Today.AddDays(-2))),
+                new(Guid.NewGuid(), 103, TutorRequestDirection.Outgoing, TutorRequestStatus.Accepted, "Aylin Demir", "Deutsch", 16, DateOnly.FromDateTime(DateTime.Today.AddDays(-3)))
             ],
             Activities:
             [
@@ -157,10 +170,17 @@ public sealed class DashboardDataService(
 
     private async Task<IReadOnlyList<SessionRecord>> GetSessionsAsync(CancellationToken cancellationToken)
     {
+        if (cache.TryGetValue(SessionsCacheKey, out IReadOnlyList<SessionRecord>? cachedSessions) && cachedSessions is not null)
+        {
+            return cachedSessions;
+        }
+
         try
         {
             var json = await httpClient.GetStringAsync(SessionApiUrl, cancellationToken);
-            return ParseSessions(json);
+            var sessions = ParseSessions(json);
+            cache.Set(SessionsCacheKey, sessions, SessionsCacheDuration);
+            return sessions;
         }
         catch (Exception exception)
         {
@@ -169,28 +189,139 @@ public sealed class DashboardDataService(
         }
     }
 
-    private static IReadOnlyList<TutorRequest> GetReceivedRequests(
+    private IReadOnlyList<TutorRequestRecord> ApplyRequestStatusOverlays(IEnumerable<TutorRequestRecord> requests)
+    {
+        return requests
+            .Select(request =>
+            {
+                if (!requestStatusOverlay.TryGetStatus(request.RequestId, out var overlay))
+                {
+                    return request;
+                }
+
+                return request with
+                {
+                    Status = GetOverlayStatusValue(overlay.Status),
+                    Description = ApplyOverlaySubjectMarker(request.Description, overlay)
+                };
+            })
+            .ToList();
+    }
+
+    private static string GetOverlayStatusValue(TutorRequestStatus status)
+    {
+        return status switch
+        {
+            TutorRequestStatus.Accepted => "accepted",
+            TutorRequestStatus.Declined => "declined",
+            TutorRequestStatus.Cancelled => "cancelled",
+            _ => string.Empty
+        };
+    }
+
+    private static string ApplyOverlaySubjectMarker(string description, TutorRequestStatusOverlay overlay)
+    {
+        if (overlay.Status != TutorRequestStatus.Accepted || string.IsNullOrWhiteSpace(overlay.Subject))
+        {
+            return description;
+        }
+
+        const string subjectMarkerPrefix = "[CLASS_REQUEST_SUBJECT:";
+        var cleanedDescription = (description ?? string.Empty)
+            .Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !line.StartsWith(subjectMarkerPrefix, StringComparison.OrdinalIgnoreCase))
+            .DefaultIfEmpty("Anfrage")
+            .Aggregate((current, line) => $"{current}\n{line}");
+
+        return $"{cleanedDescription}\n{subjectMarkerPrefix}{overlay.Subject.Trim()}]";
+    }
+
+    private static IReadOnlyList<TutorRequest> GetDashboardRequests(
         IEnumerable<TutorRequestRecord> requests,
         UserProfile currentUser,
         TutorOffer? currentOffer,
+        IReadOnlyList<TutorOffer> tutorOffers,
         IReadOnlyDictionary<int, UserProfile> usersById)
     {
         return requests
-            .Where(request => IsRequestForCurrentTutor(request, currentUser, currentOffer))
-            .Where(request => IsOpenStatus(request.Status))
+            .Where(request => IsRequestRelevantForCurrentUser(request, currentUser, currentOffer))
             .OrderByDescending(request => request.CreatedAt)
-            .Select(request =>
-            {
-                usersById.TryGetValue(request.RequesterUserId, out var requester);
-
-                return new TutorRequest(
-                    Id: CreateStableGuid(request.RequestId, request.RequesterUserId),
-                    Name: GetRequesterName(request, requester),
-                    Subject: string.IsNullOrWhiteSpace(request.Subject) ? "Nachhilfe" : request.Subject,
-                    PricePerHour: request.MaxPrice,
-                    RequestedOn: DateOnly.FromDateTime(request.CreatedAt.LocalDateTime));
-            })
+            .Select(request => CreateTutorRequest(request, currentUser, tutorOffers, usersById))
+            .Where(IsVisibleDashboardRequest)
             .ToList();
+    }
+
+    private static bool IsVisibleDashboardRequest(TutorRequest request)
+    {
+        return request.Direction switch
+        {
+            TutorRequestDirection.Incoming => request.Status == TutorRequestStatus.Open,
+            TutorRequestDirection.Outgoing => request.Status is TutorRequestStatus.Open
+                or TutorRequestStatus.Accepted
+                or TutorRequestStatus.Declined,
+            _ => false
+        };
+    }
+
+    private static TutorRequest CreateTutorRequest(
+        TutorRequestRecord request,
+        UserProfile currentUser,
+        IReadOnlyList<TutorOffer> tutorOffers,
+        IReadOnlyDictionary<int, UserProfile> usersById)
+    {
+        var isOutgoing = request.RequesterUserId == currentUser.Uid;
+        var name = isOutgoing
+            ? GetOffererName(request, tutorOffers, usersById)
+            : GetRequesterName(request, usersById);
+
+        return new TutorRequest(
+            Id: CreateStableGuid(request.RequestId, isOutgoing ? request.OffererUserId : request.RequesterUserId),
+            RequestId: request.RequestId,
+            Direction: isOutgoing ? TutorRequestDirection.Outgoing : TutorRequestDirection.Incoming,
+            Status: NormalizeRequestStatus(request.Status, request.Until),
+            Name: name,
+            Subject: string.IsNullOrWhiteSpace(request.Subject) ? "Nachhilfe" : request.Subject,
+            PricePerHour: request.MaxPrice,
+            RequestedOn: DateOnly.FromDateTime(request.CreatedAt.LocalDateTime),
+            Description: request.Description);
+    }
+
+    private static bool IsRequestRelevantForCurrentUser(TutorRequestRecord request, UserProfile currentUser, TutorOffer? currentOffer)
+    {
+        return request.RequesterUserId == currentUser.Uid
+            || IsRequestForCurrentTutor(request, currentUser, currentOffer);
+    }
+
+    private static IReadOnlyList<SessionRecord> BuildAcceptedRequestSessions(
+        IEnumerable<TutorRequestRecord> requests,
+        UserProfile currentUser,
+        TutorOffer? currentOffer)
+    {
+        return requests
+            .Where(request => IsRequestForCurrentTutor(request, currentUser, currentOffer))
+            .Where(request => NormalizeRequestStatus(request.Status, request.Until) == TutorRequestStatus.Accepted)
+            .Select(request => new SessionRecord(
+                SessionId: -Math.Abs(request.RequestId),
+                TutorUserId: currentUser.Uid,
+                RequesterUserId: request.RequesterUserId,
+                Subject: GetSelectedRequestSubject(request),
+                Hours: 1m,
+                Revenue: 0m,
+                OccurredAt: request.CreatedAt.LocalDateTime,
+                Status: "completed"))
+            .ToList();
+    }
+
+    private static string GetSelectedRequestSubject(TutorRequestRecord request)
+    {
+        var selectedSubject = GetDescriptionMarker(request.Description, "CLASS_REQUEST_SUBJECT");
+
+        if (!string.IsNullOrWhiteSpace(selectedSubject))
+        {
+            return selectedSubject;
+        }
+
+        return string.IsNullOrWhiteSpace(request.Subject) ? "Nachhilfe" : request.Subject;
     }
 
     private static bool IsRequestForCurrentTutor(TutorRequestRecord request, UserProfile currentUser, TutorOffer? currentOffer)
@@ -249,6 +380,29 @@ public sealed class DashboardDataService(
             : 0;
     }
 
+    private static string GetDescriptionMarker(string description, string markerName)
+    {
+        if (string.IsNullOrWhiteSpace(description) || string.IsNullOrWhiteSpace(markerName))
+        {
+            return string.Empty;
+        }
+
+        var markerPrefix = $"[{markerName}:";
+        var markerIndex = description.IndexOf(markerPrefix, StringComparison.OrdinalIgnoreCase);
+
+        if (markerIndex < 0)
+        {
+            return string.Empty;
+        }
+
+        var valueStart = markerIndex + markerPrefix.Length;
+        var valueEnd = description.IndexOf(']', valueStart);
+
+        return valueEnd > valueStart
+            ? description[valueStart..valueEnd].Trim()
+            : string.Empty;
+    }
+
     private static bool HasMatchingSubject(string requestSubject, IEnumerable<string> tutorSubjects)
     {
         if (string.IsNullOrWhiteSpace(requestSubject))
@@ -281,12 +435,14 @@ public sealed class DashboardDataService(
             .Replace("_", string.Empty, StringComparison.Ordinal);
     }
 
-    private static string GetRequesterName(TutorRequestRecord request, UserProfile? requester)
+    private static string GetRequesterName(TutorRequestRecord request, IReadOnlyDictionary<int, UserProfile> usersById)
     {
         if (!string.IsNullOrWhiteSpace(request.RequesterName))
         {
             return request.RequesterName;
         }
+
+        usersById.TryGetValue(request.RequesterUserId, out var requester);
 
         if (!string.IsNullOrWhiteSpace(requester?.FullName))
         {
@@ -296,17 +452,53 @@ public sealed class DashboardDataService(
         return request.RequesterUserId > 0 ? $"User {request.RequesterUserId}" : "Neue Anfrage";
     }
 
+    private static string GetOffererName(
+        TutorRequestRecord request,
+        IReadOnlyList<TutorOffer> tutorOffers,
+        IReadOnlyDictionary<int, UserProfile> usersById)
+    {
+        if (request.OfferId > 0)
+        {
+            var offer = tutorOffers.FirstOrDefault(tutor => tutor.OfferId == request.OfferId);
+
+            if (!string.IsNullOrWhiteSpace(offer?.Name))
+            {
+                return offer.Name;
+            }
+        }
+
+        if (request.OffererUserId > 0 && usersById.TryGetValue(request.OffererUserId, out var offerer)
+            && !string.IsNullOrWhiteSpace(offerer.FullName))
+        {
+            return offerer.FullName;
+        }
+
+        var targetOfferId = GetTargetOfferId(request.Description);
+
+        if (targetOfferId > 0)
+        {
+            var offer = tutorOffers.FirstOrDefault(tutor => tutor.OfferId == targetOfferId);
+
+            if (!string.IsNullOrWhiteSpace(offer?.Name))
+            {
+                return offer.Name;
+            }
+        }
+
+        return request.OffererUserId > 0 ? $"User {request.OffererUserId}" : "Tutor";
+    }
+
     private static IReadOnlyList<DashboardActivity> BuildActivities(
-        IEnumerable<TutorRequest> requests,
+        IEnumerable<TutorRequestRecord> requests,
+        UserProfile currentUser,
+        TutorOffer? currentOffer,
+        IReadOnlyList<TutorOffer> tutorOffers,
+        IReadOnlyDictionary<int, UserProfile> usersById,
         IEnumerable<SessionRecord> sessions)
     {
-        var requestActivities = requests.Select(request =>
-            new DashboardActivity(
-                CreateStableGuid(request.Id.GetHashCode(), request.PricePerHour),
-                "Neue Anfrage",
-                $"{request.Name} fragt {request.Subject} an.",
-                request.RequestedOn.ToDateTime(TimeOnly.FromTimeSpan(DateTime.Now.TimeOfDay)),
-                "info"));
+        var requestActivities = requests
+            .Where(request => IsRequestRelevantForCurrentUser(request, currentUser, currentOffer))
+            .Select(request => CreateRequestActivity(request, currentUser, tutorOffers, usersById));
         var sessionActivities = sessions
             .Where(session => IsCompletedStatus(session.Status))
             .Select(session =>
@@ -322,6 +514,50 @@ public sealed class DashboardDataService(
             .OrderByDescending(activity => activity.OccurredAt)
             .Take(5)
             .ToList();
+    }
+
+    private static DashboardActivity CreateRequestActivity(
+        TutorRequestRecord request,
+        UserProfile currentUser,
+        IReadOnlyList<TutorOffer> tutorOffers,
+        IReadOnlyDictionary<int, UserProfile> usersById)
+    {
+        var projected = CreateTutorRequest(request, currentUser, tutorOffers, usersById);
+        var subject = projected.Subject;
+        var name = projected.Name;
+        var title = projected.Status switch
+        {
+            TutorRequestStatus.Accepted => "Anfrage angenommen",
+            TutorRequestStatus.Declined => "Anfrage abgelehnt",
+            TutorRequestStatus.Cancelled => "Anfrage zurückgezogen",
+            TutorRequestStatus.Read => "Anfrage gelesen",
+            _ => projected.Direction == TutorRequestDirection.Outgoing ? "Anfrage gesendet" : "Neue Anfrage"
+        };
+        var detail = (projected.Direction, projected.Status) switch
+        {
+            (TutorRequestDirection.Outgoing, TutorRequestStatus.Open) => $"Du hast {name} wegen {subject} angefragt.",
+            (TutorRequestDirection.Outgoing, TutorRequestStatus.Accepted) => $"{name} hat deine Anfrage fuer {subject} angenommen.",
+            (TutorRequestDirection.Outgoing, TutorRequestStatus.Declined) => $"{name} hat deine Anfrage fuer {subject} abgelehnt.",
+            (TutorRequestDirection.Outgoing, TutorRequestStatus.Cancelled) => $"Du hast deine Anfrage an {name} zurückgezogen.",
+            (TutorRequestDirection.Incoming, TutorRequestStatus.Accepted) => $"Du hast die Anfrage von {name} fuer {subject} angenommen.",
+            (TutorRequestDirection.Incoming, TutorRequestStatus.Declined) => $"Du hast die Anfrage von {name} fuer {subject} abgelehnt.",
+            (TutorRequestDirection.Incoming, TutorRequestStatus.Cancelled) => $"{name} hat die Anfrage fuer {subject} zurückgezogen.",
+            _ => $"{name} fragt {subject} an."
+        };
+        var tone = projected.Status switch
+        {
+            TutorRequestStatus.Accepted => "success",
+            TutorRequestStatus.Declined or TutorRequestStatus.Cancelled => "warning",
+            TutorRequestStatus.Read => "neutral",
+            _ => "info"
+        };
+
+        return new DashboardActivity(
+            CreateStableGuid(request.RequestId, projected.Direction == TutorRequestDirection.Outgoing ? currentUser.Uid : request.RequesterUserId),
+            title,
+            detail,
+            request.CreatedAt.LocalDateTime,
+            tone);
     }
 
     private static IReadOnlyList<DashboardChartPoint> BuildMonthlyChart(
@@ -350,10 +586,31 @@ public sealed class DashboardDataService(
 
     private static bool IsOpenStatus(string status)
     {
-        return string.IsNullOrWhiteSpace(status)
-            || status.Equals("open", StringComparison.OrdinalIgnoreCase)
-            || status.Equals("pending", StringComparison.OrdinalIgnoreCase)
-            || status.Equals("new", StringComparison.OrdinalIgnoreCase);
+        return NormalizeRequestStatus(status, until: null) == TutorRequestStatus.Open;
+    }
+
+    private static TutorRequestStatus NormalizeRequestStatus(string status, DateTimeOffset? until)
+    {
+        var normalizedStatus = string.IsNullOrWhiteSpace(status)
+            ? TutorRequestStatus.Open
+            : status.Trim().ToLowerInvariant() switch
+            {
+                "open" or "pending" or "new" or "created" or "requested" or "sent" => TutorRequestStatus.Open,
+                "accepted" or "approved" or "confirmed" or "angenommen" => TutorRequestStatus.Accepted,
+                "declined" or "rejected" or "denied" or "abgelehnt" => TutorRequestStatus.Declined,
+                "cancelled" or "canceled" or "withdrawn" or "zurueckgezogen" => TutorRequestStatus.Cancelled,
+                "read" or "seen" or "archived" or "gelesen" => TutorRequestStatus.Read,
+                _ => TutorRequestStatus.Unknown
+            };
+
+        if (normalizedStatus == TutorRequestStatus.Open
+            && until.HasValue
+            && until.Value <= DateTimeOffset.Now)
+        {
+            return TutorRequestStatus.Cancelled;
+        }
+
+        return normalizedStatus;
     }
 
     private static bool IsCompletedStatus(string status)

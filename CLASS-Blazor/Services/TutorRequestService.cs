@@ -4,16 +4,22 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CLASS_Blazor.Services;
 
 public sealed class TutorRequestService(
     HttpClient httpClient,
-    ILogger<TutorRequestService> logger)
+    ILogger<TutorRequestService> logger,
+    IMemoryCache cache)
 {
     private const string RequestApiUrl = "request";
     private const string SubjectApiUrl = "subject";
+    private const string RequestsCacheKey = "class:requests";
+    private const string SubjectsCacheKey = "class:subjects";
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan RequestsCacheDuration = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan SubjectCacheDuration = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -22,6 +28,11 @@ public sealed class TutorRequestService(
 
     public async Task<IReadOnlyList<TutorRequestRecord>> GetRequestsAsync(CancellationToken cancellationToken = default)
     {
+        if (cache.TryGetValue(RequestsCacheKey, out IReadOnlyList<TutorRequestRecord>? cachedRequests) && cachedRequests is not null)
+        {
+            return cachedRequests;
+        }
+
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -31,7 +42,9 @@ public sealed class TutorRequestService(
             var subjects = await GetSubjectsAsync(timeoutCts.Token);
             var subjectsById = subjects.ToDictionary(subject => subject.Suid);
 
-            return ParseRequests(json, subjectsById);
+            var requests = ParseRequests(json, subjectsById);
+            cache.Set(RequestsCacheKey, requests, RequestsCacheDuration);
+            return requests;
         }
         catch (Exception exception)
         {
@@ -44,6 +57,7 @@ public sealed class TutorRequestService(
         UserProfile requester,
         TutorOffer tutor,
         string authToken,
+        string selectedSubject = "",
         CancellationToken cancellationToken = default)
     {
         if (requester.Uid <= 0)
@@ -73,14 +87,14 @@ public sealed class TutorRequestService(
 
             var subjects = await GetSubjectsAsync(timeoutCts.Token);
             var normalizedSubjects = NormalizeSubjects(tutor.Subjects);
-            var subjectIds = GetSubjectIds(normalizedSubjects, subjects);
+            var subject = GetSelectedRequestSubject(selectedSubject, normalizedSubjects);
+            var subjectIds = GetSubjectIds([subject], subjects);
 
             if (subjectIds.Length == 0)
             {
                 return TutorRequestResult.Failed("Für dieses Angebot konnte kein bekanntes Fach gefunden werden.");
             }
 
-            var subject = normalizedSubjects.FirstOrDefault() ?? "Nachhilfe";
             var payload = new
             {
                 requester_uid = requester.Uid,
@@ -117,6 +131,8 @@ public sealed class TutorRequestService(
                     : $"Die Anfrage konnte nicht gesendet werden ({(int)response.StatusCode}): {apiError}");
             }
 
+            cache.Remove(RequestsCacheKey);
+            cache.Remove(RequestsCacheKey);
             return TutorRequestResult.Sent();
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -129,6 +145,255 @@ public sealed class TutorRequestService(
             logger.LogWarning(exception, "Tutor request could not be sent to {RequestApiUrl}.", RequestApiUrl);
             return TutorRequestResult.Failed($"Die Anfrage konnte nicht gesendet werden: {exception.Message}");
         }
+    }
+
+    public async Task<TutorRequestResult> UpdateRequestStatusAsync(
+        int requestId,
+        string status,
+        string authToken,
+        string currentDescription = "",
+        string selectedSubject = "",
+        CancellationToken cancellationToken = default)
+    {
+        if (requestId <= 0)
+        {
+            return TutorRequestResult.Failed("Die Anfrage konnte keiner API-ID zugeordnet werden.");
+        }
+
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return TutorRequestResult.Failed("Der neue Anfrage-Status fehlt.");
+        }
+
+        if (string.IsNullOrWhiteSpace(authToken))
+        {
+            return TutorRequestResult.Failed("Bitte logge dich erneut ein, um die Anfrage zu aktualisieren.");
+        }
+
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(RequestTimeout);
+
+            var payload = new
+            {
+                status
+            };
+
+            using var request = CreateAuthorizedRequest(HttpMethod.Put, $"{RequestApiUrl}/{requestId}", authToken);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return TutorRequestResult.Failed("Bitte logge dich erneut ein, um die Anfrage zu aktualisieren.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return TutorRequestResult.Failed("Du kannst diese Anfrage nicht mit diesem Login aktualisieren.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return TutorRequestResult.Failed("Die Anfrage wurde nicht gefunden.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var apiError = await TryReadApiErrorAsync(response, timeoutCts.Token);
+
+                if (response.StatusCode == HttpStatusCode.BadRequest
+                    && apiError.Contains("No fields to update", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (IsCancelledStatus(status))
+                    {
+                        return await ExpireRequestAsync(requestId, authToken, cancellationToken);
+                    }
+
+                    if (IsDecisionStatus(status))
+                    {
+                        return await UpdateRequestDescriptionStatusAsync(requestId, status, currentDescription, selectedSubject, authToken, cancellationToken);
+                    }
+                }
+
+                return TutorRequestResult.Failed(string.IsNullOrWhiteSpace(apiError)
+                    ? $"Die Anfrage konnte nicht aktualisiert werden ({(int)response.StatusCode})."
+                    : $"Die Anfrage konnte nicht aktualisiert werden ({(int)response.StatusCode}): {apiError}");
+            }
+
+            cache.Remove(RequestsCacheKey);
+            cache.Remove(RequestsCacheKey);
+            return TutorRequestResult.Sent();
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Tutor request {RequestId} update timed out at {RequestApiUrl}.", requestId, RequestApiUrl);
+            return TutorRequestResult.Failed("Das Aktualisieren dauert zu lange. Bitte prÃ¼fe deine Verbindung und versuche es erneut.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Tutor request {RequestId} could not be updated at {RequestApiUrl}.", requestId, RequestApiUrl);
+            return TutorRequestResult.Failed($"Die Anfrage konnte nicht aktualisiert werden: {exception.Message}");
+        }
+    }
+
+    private async Task<TutorRequestResult> ExpireRequestAsync(
+        int requestId,
+        string authToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(RequestTimeout);
+
+            var payload = new
+            {
+                until = FormatApiDateTime(DateTime.UtcNow.AddDays(-1))
+            };
+
+            using var request = CreateAuthorizedRequest(HttpMethod.Put, $"{RequestApiUrl}/{requestId}", authToken);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return TutorRequestResult.Failed("Bitte logge dich erneut ein, um die Anfrage zurückzuziehen.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return TutorRequestResult.Failed("Du kannst diese Anfrage nicht mit diesem Login zurückziehen.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return TutorRequestResult.Failed("Die Anfrage wurde nicht gefunden.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var apiError = await TryReadApiErrorAsync(response, timeoutCts.Token);
+                return TutorRequestResult.Failed(string.IsNullOrWhiteSpace(apiError)
+                    ? $"Die Anfrage konnte nicht zurückgezogen werden ({(int)response.StatusCode})."
+                    : $"Die Anfrage konnte nicht zurückgezogen werden ({(int)response.StatusCode}): {apiError}");
+            }
+
+            return TutorRequestResult.Sent();
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Tutor request {RequestId} expiration timed out at {RequestApiUrl}.", requestId, RequestApiUrl);
+            return TutorRequestResult.Failed("Das Zurückziehen dauert zu lange. Bitte prüfe deine Verbindung und versuche es erneut.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Tutor request {RequestId} could not be expired at {RequestApiUrl}.", requestId, RequestApiUrl);
+            return TutorRequestResult.Failed($"Die Anfrage konnte nicht zurückgezogen werden: {exception.Message}");
+        }
+    }
+
+    private async Task<TutorRequestResult> UpdateRequestDescriptionStatusAsync(
+        int requestId,
+        string status,
+        string currentDescription,
+        string selectedSubject,
+        string authToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(RequestTimeout);
+
+            var payload = new
+            {
+                description = ApplyStatusMarker(currentDescription, status, selectedSubject)
+            };
+
+            using var request = CreateAuthorizedRequest(HttpMethod.Put, $"{RequestApiUrl}/{requestId}", authToken);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return TutorRequestResult.Failed("Bitte logge dich erneut ein, um die Anfrage zu aktualisieren.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return TutorRequestResult.Failed("Du kannst diese Anfrage nicht mit diesem Login aktualisieren.");
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return TutorRequestResult.Failed("Die Anfrage wurde nicht gefunden.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var apiError = await TryReadApiErrorAsync(response, timeoutCts.Token);
+                return TutorRequestResult.Failed(string.IsNullOrWhiteSpace(apiError)
+                    ? $"Die Anfrage konnte nicht aktualisiert werden ({(int)response.StatusCode})."
+                    : $"Die Anfrage konnte nicht aktualisiert werden ({(int)response.StatusCode}): {apiError}");
+            }
+
+            return TutorRequestResult.Sent();
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Tutor request {RequestId} description status update timed out at {RequestApiUrl}.", requestId, RequestApiUrl);
+            return TutorRequestResult.Failed("Das Aktualisieren dauert zu lange. Bitte prüfe deine Verbindung und versuche es erneut.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Tutor request {RequestId} description status could not be updated at {RequestApiUrl}.", requestId, RequestApiUrl);
+            return TutorRequestResult.Failed($"Die Anfrage konnte nicht aktualisiert werden: {exception.Message}");
+        }
+    }
+
+    private static bool IsCancelledStatus(string status)
+    {
+        return status.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("canceled", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("withdrawn", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDecisionStatus(string status)
+    {
+        return status.Equals("accepted", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("declined", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("rejected", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ApplyStatusMarker(string description, string status, string selectedSubject)
+    {
+        const string markerPrefix = "[CLASS_REQUEST_STATUS:";
+        const string subjectMarkerPrefix = "[CLASS_REQUEST_SUBJECT:";
+        var cleanedDescription = (description ?? string.Empty)
+            .Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !line.StartsWith(markerPrefix, StringComparison.OrdinalIgnoreCase))
+            .Where(line => !line.StartsWith(subjectMarkerPrefix, StringComparison.OrdinalIgnoreCase))
+            .DefaultIfEmpty("Anfrage")
+            .Aggregate((current, line) => $"{current}\n{line}");
+
+        var statusMarker = $"{markerPrefix}{NormalizeStatusMarker(status)}]";
+
+        if (status.Equals("accepted", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(selectedSubject))
+        {
+            return $"{cleanedDescription}\n{statusMarker}\n{subjectMarkerPrefix}{selectedSubject.Trim()}]";
+        }
+
+        return $"{cleanedDescription}\n{statusMarker}";
+    }
+
+    private static string NormalizeStatusMarker(string status)
+    {
+        return status.Equals("accepted", StringComparison.OrdinalIgnoreCase)
+            ? "accepted"
+            : "declined";
     }
 
     private static IReadOnlyList<TutorRequestRecord> ParseRequests(
@@ -153,7 +418,7 @@ public sealed class TutorRequestService(
                 Until: GetDate(element, "until", "available_until"),
                 Description: GetString(element, "description", "message"),
                 CreatedAt: GetDate(element, "created_at", "createdAt", "requested_on", "requestedOn") ?? DateTimeOffset.Now,
-                Status: GetString(element, "status")));
+                Status: GetRequestStatus(element)));
         }
 
         return requests;
@@ -161,10 +426,17 @@ public sealed class TutorRequestService(
 
     private async Task<IReadOnlyList<SubjectDto>> GetSubjectsAsync(CancellationToken cancellationToken)
     {
+        if (cache.TryGetValue(SubjectsCacheKey, out IReadOnlyList<SubjectDto>? cachedSubjects) && cachedSubjects is not null)
+        {
+            return cachedSubjects;
+        }
+
         try
         {
             var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
-            return ParseSubjects(subjectsJson);
+            var subjects = ParseSubjects(subjectsJson);
+            cache.Set(SubjectsCacheKey, subjects, SubjectCacheDuration);
+            return subjects;
         }
         catch (OperationCanceledException)
         {
@@ -226,6 +498,32 @@ public sealed class TutorRequestService(
         var subjects = GetSubjects(subjectIds, subjectsById);
 
         return subjects.Length == 0 ? string.Empty : string.Join(", ", subjects);
+    }
+
+    private static string GetRequestStatus(JsonElement element)
+    {
+        var status = GetString(element, "status", "state", "request_status", "requestStatus");
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            return status;
+        }
+
+        var description = GetString(element, "description", "message");
+        const string markerPrefix = "[CLASS_REQUEST_STATUS:";
+        var markerIndex = description.IndexOf(markerPrefix, StringComparison.OrdinalIgnoreCase);
+
+        if (markerIndex < 0)
+        {
+            return string.Empty;
+        }
+
+        var statusStart = markerIndex + markerPrefix.Length;
+        var statusEnd = description.IndexOf(']', statusStart);
+
+        return statusEnd > statusStart
+            ? description[statusStart..statusEnd].Trim()
+            : string.Empty;
     }
 
     private static string GetString(JsonElement element, params string[] names)
@@ -322,6 +620,22 @@ public sealed class TutorRequestService(
             .Select(subject => subject.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string GetSelectedRequestSubject(string selectedSubject, IReadOnlyList<string> availableSubjects)
+    {
+        if (!string.IsNullOrWhiteSpace(selectedSubject))
+        {
+            var match = availableSubjects.FirstOrDefault(subject =>
+                string.Equals(subject, selectedSubject.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(match))
+            {
+                return match;
+            }
+        }
+
+        return availableSubjects.FirstOrDefault() ?? "Nachhilfe";
     }
 
     private static string FormatApiDateTime(DateTime dateTime)

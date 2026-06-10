@@ -145,13 +145,32 @@ else if (CurrentUser is not null)
                         </div>
                         <div>
                             <span>Bewertung</span>
-                            <div class="profile-stars" aria-label="Sternebewertung">
+                            <div class="profile-stars" aria-label="@($"{CurrentTutorOffer.Rating:0.0} von 5 Sternen")">
                                 @for (var i = 0; i < 5; i++)
                                 {
                                     var starClass = GetStarFillClass(CurrentTutorOffer.Rating, i);
-                                    var starSymbol = starClass == "empty" ? "\u2606" : "\u2605";
+                                    var halfGradientId = $"profile-rating-star-{i}-half";
+                                    var fill = starClass switch
+                                    {
+                                        "filled" => "#ffb300",
+                                        "half-filled" => $"url(#{halfGradientId})",
+                                        _ => "#d6c6a0"
+                                    };
 
-                                    <span class="star @starClass" aria-hidden="true">@starSymbol</span>
+                                    <span class="profile-star @starClass" aria-hidden="true">
+                                        <svg class="profile-star-svg" viewBox="0 0 24 24" focusable="false">
+                                            <defs>
+                                                <linearGradient id="@halfGradientId" x1="0%" y1="0%" x2="100%" y2="0%">
+                                                    <stop offset="0%" stop-color="#ffb300" />
+                                                    <stop offset="50%" stop-color="#ffb300" />
+                                                    <stop offset="50%" stop-color="#c8ad72" />
+                                                    <stop offset="100%" stop-color="#8f7a51" />
+                                                </linearGradient>
+                                            </defs>
+                                            <path class="profile-star-shape" fill="@fill" d="M12 2.4l2.96 6 6.62.96-4.79 4.67 1.13 6.59L12 17.51l-5.92 3.11 1.13-6.59-4.79-4.67 6.62-.96L12 2.4Z" />
+                                            <path class="profile-star-sheen" d="M12 4.5l2.2 4.45 4.9.72-3.55 3.45.84 4.88L12 15.7 7.61 18l.84-4.88L4.9 9.67l4.9-.72L12 4.5Z" />
+                                        </svg>
+                                    </span>
                                 }
                             </div>
                         </div>
@@ -399,7 +418,7 @@ else
 
     private string GetTutorPanelTitle()
     {
-        return CurrentTutorOffer is null ? "Dein Nachhilfeangebot" : "Dein sichtbares Angebot";
+        return CurrentTutorOffer is null ? "Dein Nachhilfeangebot" : "Dein Angebot";
     }
 
     private static string GetPriceText(TutorOffer tutor)

@@ -30,10 +30,30 @@ public sealed record SubjectDonutSegment(
 
 public sealed record TutorRequest(
     Guid Id,
+    int RequestId,
+    TutorRequestDirection Direction,
+    TutorRequestStatus Status,
     string Name,
     string Subject,
     int PricePerHour,
-    DateOnly RequestedOn);
+    DateOnly RequestedOn,
+    string Description = "");
+
+public enum TutorRequestDirection
+{
+    Incoming,
+    Outgoing
+}
+
+public enum TutorRequestStatus
+{
+    Open,
+    Accepted,
+    Declined,
+    Cancelled,
+    Read,
+    Unknown
+}
 
 public sealed record DashboardActivity(
     Guid Id,

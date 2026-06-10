@@ -4,18 +4,24 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CLASS_Blazor.Services;
 
 public sealed class TutorDirectoryService(
     HttpClient httpClient,
     ILogger<TutorDirectoryService> logger,
-    ProfileImageStorageService profileImageStorageService)
+    ProfileImageStorageService profileImageStorageService,
+    IMemoryCache cache)
 {
     private const string TutorApiUrl = "offer";
     private const string UserApiUrl = "user";
     private const string SubjectApiUrl = "subject";
+    private const string TutorDirectoryCacheKey = "class:tutor-directory";
+    private const string SubjectsCacheKey = "class:subjects";
     private static readonly TimeSpan CreateOfferTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan DirectoryCacheDuration = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan SubjectCacheDuration = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -24,27 +30,42 @@ public sealed class TutorDirectoryService(
 
     public async Task<TutorDirectoryResult> GetTutorsAsync(CancellationToken cancellationToken = default)
     {
+        if (cache.TryGetValue(TutorDirectoryCacheKey, out TutorDirectoryResult? cachedResult) && cachedResult is not null)
+        {
+            return cachedResult;
+        }
+
         try
         {
-            var offersJson = await httpClient.GetStringAsync(TutorApiUrl, cancellationToken);
-            var usersJson = await httpClient.GetStringAsync(UserApiUrl, cancellationToken);
-            var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
+            var offersTask = httpClient.GetStringAsync(TutorApiUrl, cancellationToken);
+            var usersTask = httpClient.GetStringAsync(UserApiUrl, cancellationToken);
+            var subjectsTask = GetSubjectsAsync(cancellationToken);
+
+            await Task.WhenAll(offersTask, usersTask, subjectsTask);
+
+            var offersJson = await offersTask;
+            var usersJson = await usersTask;
+            var subjects = await subjectsTask;
             var apiOffers = ParseApiOffers(offersJson);
             var usersById = ParseUsers(usersJson).ToDictionary(user => user.Uid);
-            var subjectsById = ParseSubjects(subjectsJson).ToDictionary(subject => subject.Suid);
+            var subjectsById = subjects.ToDictionary(subject => subject.Suid);
 
             if (apiOffers.Count == 0)
             {
-                return new TutorDirectoryResult(
+                var emptyResult = new TutorDirectoryResult(
                     [],
                     LoadedFromApi: false,
                     Message: "Die API hat keine Nachhilfeangebote geliefert.");
+                cache.Set(TutorDirectoryCacheKey, emptyResult, DirectoryCacheDuration);
+                return emptyResult;
             }
 
-            return new TutorDirectoryResult(
+            var result = new TutorDirectoryResult(
                 BuildTutorsFromApi(apiOffers, usersById, subjectsById),
                 LoadedFromApi: true,
                 Message: $"{apiOffers.Count} Nachhilfeangebote wurden aus der API geladen.");
+            cache.Set(TutorDirectoryCacheKey, result, DirectoryCacheDuration);
+            return result;
         }
         catch (Exception exception)
         {
@@ -129,6 +150,7 @@ public sealed class TutorDirectoryService(
                 subjects,
                 timeoutCts.Token);
 
+            cache.Remove(TutorDirectoryCacheKey);
             return TutorOfferCreationResult.Created(createdOffer);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -190,6 +212,7 @@ public sealed class TutorDirectoryService(
                     : $"Das Angebot konnte nicht gelöscht werden ({(int)response.StatusCode}): {apiError}");
             }
 
+            cache.Remove(TutorDirectoryCacheKey);
             return TutorOfferDeletionResult.Deleted();
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -263,10 +286,17 @@ public sealed class TutorDirectoryService(
 
     private async Task<IReadOnlyList<SubjectDto>> GetSubjectsAsync(CancellationToken cancellationToken)
     {
+        if (cache.TryGetValue(SubjectsCacheKey, out IReadOnlyList<SubjectDto>? cachedSubjects) && cachedSubjects is not null)
+        {
+            return cachedSubjects;
+        }
+
         try
         {
             var subjectsJson = await httpClient.GetStringAsync(SubjectApiUrl, cancellationToken);
-            return ParseSubjects(subjectsJson);
+            var subjects = ParseSubjects(subjectsJson);
+            cache.Set(SubjectsCacheKey, subjects, SubjectCacheDuration);
+            return subjects;
         }
         catch (OperationCanceledException)
         {

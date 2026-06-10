@@ -5,6 +5,9 @@
 @inject AuthSessionStorageService AuthSessionStorage
 @inject TutorDirectoryService TutorDirectoryService
 @inject UserSessionService UserSessionService
+@inject TutorRequestService TutorRequestService
+@inject TutorRequestStatusOverlayService RequestStatusOverlay
+@inject IJSRuntime JS
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -50,7 +53,7 @@
         <section class="dashboard-summary-grid" aria-label="Dashboard Zusammenfassung">
             <div class="dashboard-summary-stack">
                 <a class="dashboard-summary-card dashboard-summary-card-requests" href="#dashboard-requests">
-                    <span class="dashboard-summary-label">Offene Anfragen</span>
+                    <span class="dashboard-summary-label">Anfragen</span>
                     <strong class="dashboard-summary-value">@OpenRequests.Count</strong>
                     <span class="dashboard-summary-meta">@GetOpenRequestsLabel()</span>
                 </a>
@@ -141,9 +144,16 @@
         <section class="dashboard-work-grid" aria-label="Anfragen und Aktivit&auml;ten">
             <DashboardRequestList Requests="OpenRequests"
                                   OnAccept="AcceptRequest"
-                                  OnDecline="DeclineRequest" />
+                                  OnDecline="DeclineRequest"
+                                  OnCancel="CancelRequest"
+                                  OnMarkRead="MarkRequestRead" />
             <DashboardActivityFeed Activities="VisibleActivities" />
         </section>
+
+        @if (!string.IsNullOrWhiteSpace(RequestActionMessage))
+        {
+            <p class="dashboard-request-message">@RequestActionMessage</p>
+        }
     }
 </section>
 
@@ -178,6 +188,8 @@
         [2026] = new[] { 72m, 96m, 126m, 126m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m }
     };
 
+    private const string ReadRequestStoragePrefix = "class-dashboard-read-request";
+
     private DashboardSnapshot? Snapshot { get; set; }
 
     private List<TutorRequest> OpenRequests { get; set; } = new();
@@ -187,6 +199,8 @@
     private TutorOffer? CurrentTutorOffer { get; set; }
 
     private string DeleteOfferMessage { get; set; } = string.Empty;
+
+    private string RequestActionMessage { get; set; } = string.Empty;
 
     private bool IsDeleteConfirmationVisible { get; set; }
 
@@ -276,8 +290,8 @@
     private string GetOpenRequestsLabel()
     {
         return OpenRequests.Count == 1
-            ? "wartet auf Antwort"
-            : "warten auf Antwort";
+            ? "braucht deine Aufmerksamkeit"
+            : "brauchen deine Aufmerksamkeit";
     }
 
     protected override async Task OnInitializedAsync()
@@ -289,21 +303,185 @@
         Activities = Snapshot.Activities.ToList();
         IsLoading = false;
 
+        FeedCancellation = new CancellationTokenSource();
+
         if (Snapshot.IsTestData)
         {
-            FeedCancellation = new CancellationTokenSource();
             _ = RefreshFeedAsync(FeedCancellation.Token);
+        }
+        else
+        {
+            _ = RefreshDashboardAsync(FeedCancellation.Token);
         }
     }
 
-    private void AcceptRequest(TutorRequest request)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        CompleteRequest(request, true);
+        if (!firstRender || Snapshot is null)
+        {
+            return;
+        }
+
+        OpenRequests = await FilterReadRequestsAsync(OpenRequests);
+        StateHasChanged();
     }
 
-    private void DeclineRequest(TutorRequest request)
+    private async Task AcceptRequest(TutorRequest request)
     {
-        CompleteRequest(request, false);
+        await UpdateRequestStatusAsync(request, TutorRequestStatus.Accepted, "accepted");
+    }
+
+    private async Task DeclineRequest(TutorRequest request)
+    {
+        await UpdateRequestStatusAsync(request, TutorRequestStatus.Declined, "declined");
+    }
+
+    private async Task CancelRequest(TutorRequest request)
+    {
+        await UpdateRequestStatusAsync(request, TutorRequestStatus.Cancelled, "cancelled");
+    }
+
+    private async Task MarkRequestRead(TutorRequest request)
+    {
+        RequestActionMessage = string.Empty;
+        await JS.InvokeVoidAsync("localStorage.setItem", GetReadRequestStorageKey(request), "1");
+        OpenRequests.RemoveAll(openRequest => openRequest.Id == request.Id);
+
+        AddActivity(
+            "Status gelesen",
+            $"Du hast die Antwort von {request.Name} fuer {request.Subject} abgehakt.",
+            "neutral");
+    }
+
+    private async Task<List<TutorRequest>> FilterReadRequestsAsync(List<TutorRequest> requests)
+    {
+        var visibleRequests = new List<TutorRequest>();
+
+        foreach (var request in requests)
+        {
+            if (request.Direction == TutorRequestDirection.Outgoing
+                && request.Status is TutorRequestStatus.Accepted or TutorRequestStatus.Declined
+                && await IsRequestMarkedReadAsync(request))
+            {
+                continue;
+            }
+
+            visibleRequests.Add(request);
+        }
+
+        return visibleRequests;
+    }
+
+    private async Task<bool> IsRequestMarkedReadAsync(TutorRequest request)
+    {
+        var value = await JS.InvokeAsync<string?>("localStorage.getItem", GetReadRequestStorageKey(request));
+        return string.Equals(value, "1", StringComparison.Ordinal);
+    }
+
+    private string GetReadRequestStorageKey(TutorRequest request)
+    {
+        var userId = UserSessionService.CurrentUser?.Uid ?? 0;
+        return $"{ReadRequestStoragePrefix}-{userId}-{request.RequestId}";
+    }
+
+    private async Task UpdateRequestStatusAsync(TutorRequest request, TutorRequestStatus status, string apiStatus)
+    {
+        RequestActionMessage = string.Empty;
+
+        var result = await TutorRequestService.UpdateRequestStatusAsync(
+            request.RequestId,
+            apiStatus,
+            UserSessionService.AuthToken,
+            request.Description,
+            request.Subject);
+
+        if (!result.Success)
+        {
+            if (ShouldUseLocalStatusFallback(request, status, result.Message))
+            {
+                RequestStatusOverlay.SetStatus(request.RequestId, status, request.Subject);
+                result = TutorRequestResult.Sent();
+            }
+        }
+
+        if (!result.Success)
+        {
+            RequestActionMessage = result.Message ?? "Die Anfrage konnte nicht aktualisiert werden.";
+            return;
+        }
+
+        var updatedRequest = request with
+        {
+            Status = status
+        };
+
+        OpenRequests.RemoveAll(openRequest => openRequest.Id == request.Id);
+
+        if (IsVisibleRequestAfterStatusUpdate(updatedRequest))
+        {
+            OpenRequests.Insert(0, updatedRequest);
+        }
+
+        AddActivity(
+            GetRequestActivityTitle(updatedRequest),
+            GetRequestActivityDetail(updatedRequest),
+            GetRequestActivityTone(updatedRequest));
+    }
+
+    private static bool IsVisibleRequestAfterStatusUpdate(TutorRequest request)
+    {
+        return request.Direction == TutorRequestDirection.Outgoing
+            && request.Status is TutorRequestStatus.Accepted or TutorRequestStatus.Declined;
+    }
+
+    private static bool ShouldUseLocalStatusFallback(TutorRequest request, TutorRequestStatus status, string? message)
+    {
+        return request.Direction == TutorRequestDirection.Incoming
+            && status is TutorRequestStatus.Accepted or TutorRequestStatus.Declined
+            && !string.IsNullOrWhiteSpace(message)
+            && message.Contains("nicht mit diesem Login", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRequestActivityTitle(TutorRequest request)
+    {
+        return request.Status switch
+        {
+            TutorRequestStatus.Accepted => "Anfrage angenommen",
+            TutorRequestStatus.Declined => "Anfrage abgelehnt",
+            TutorRequestStatus.Cancelled => "Anfrage zurückgezogen",
+            TutorRequestStatus.Read => "Status gelesen",
+            _ => "Anfrage aktualisiert"
+        };
+    }
+
+    private static string GetRequestActivityDetail(TutorRequest request)
+    {
+        return request.Status switch
+        {
+            TutorRequestStatus.Accepted when request.Direction == TutorRequestDirection.Incoming =>
+                $"Du hast die Anfrage von {request.Name} fuer {request.Subject} angenommen.",
+            TutorRequestStatus.Declined when request.Direction == TutorRequestDirection.Incoming =>
+                $"Du hast die Anfrage von {request.Name} fuer {request.Subject} abgelehnt.",
+            TutorRequestStatus.Cancelled =>
+                $"Du hast deine Anfrage an {request.Name} fuer {request.Subject} zurückgezogen.",
+            TutorRequestStatus.Read =>
+                $"Du hast die Antwort von {request.Name} fuer {request.Subject} abgehakt.",
+            TutorRequestStatus.Accepted =>
+                $"{request.Name} hat deine Anfrage fuer {request.Subject} angenommen.",
+            TutorRequestStatus.Declined =>
+                $"{request.Name} hat deine Anfrage fuer {request.Subject} abgelehnt.",
+            _ => $"{request.Name} - {request.Subject} fuer {request.PricePerHour} EUR / h."
+        };
+    }
+
+    private static string GetRequestActivityTone(TutorRequest request)
+    {
+        return request.Status switch
+        {
+            TutorRequestStatus.Accepted => "success",
+            TutorRequestStatus.Declined or TutorRequestStatus.Cancelled => "warning",
+            _ => "neutral"
+        };
     }
 
     private void CompleteRequest(TutorRequest request, bool isAccepted)
@@ -340,6 +518,31 @@
                 await InvokeAsync(() =>
                 {
                     AddActivity(template.Title, template.Detail, template.Tone);
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RefreshDashboardAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var refreshedSnapshot = await DashboardData.GetDashboardAsync(cancellationToken);
+                var refreshedRequests = await FilterReadRequestsAsync(refreshedSnapshot.OpenRequests.ToList());
+
+                await InvokeAsync(() =>
+                {
+                    Snapshot = refreshedSnapshot;
+                    OpenRequests = refreshedRequests;
+                    Activities = refreshedSnapshot.Activities.ToList();
                     StateHasChanged();
                 });
             }

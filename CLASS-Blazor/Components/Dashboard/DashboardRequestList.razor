@@ -4,16 +4,16 @@
     <div class="dashboard-panel-heading">
         <div>
             <p class="dashboard-section-kicker">Anfragen</p>
-            <h2>Offene Anfragen</h2>
+            <h2>Aktuelle Anfragen</h2>
         </div>
-        <a class="dashboard-count-badge" href="#dashboard-requests">@Requests.Count offen</a>
+        <a class="dashboard-count-badge" href="#dashboard-requests">@Requests.Count aktuell</a>
     </div>
 
     @if (Requests.Count == 0)
     {
         <div class="dashboard-empty-inline">
-            <strong>Keine offenen Anfragen</strong>
-            <span>Neue Buchungen erscheinen automatisch in dieser Liste.</span>
+            <strong>Keine aktuellen Anfragen</strong>
+            <span>Neue und beantwortete Anfragen erscheinen automatisch in dieser Liste.</span>
         </div>
     }
     else
@@ -21,22 +21,40 @@
         <div class="dashboard-request-list">
             @foreach (var request in Requests)
             {
-                <section class="dashboard-request-item" @key="request.Id">
+                <section class="dashboard-request-item @GetRequestStateClass(request)" @key="request.Id">
                     <div class="dashboard-request-main">
-                        <strong>@request.Name</strong>
+                        <strong>@GetRequestTitle(request)</strong>
                         <span>@request.Subject</span>
+                        <small class="dashboard-request-direction">@GetDirectionLabel(request)</small>
                     </div>
                     <div class="dashboard-request-meta">
                         <span class="dashboard-request-price">@request.PricePerHour EUR / h</span>
                         <time datetime="@request.RequestedOn.ToString("yyyy-MM-dd")">@request.RequestedOn.ToString("dd.MM.yyyy")</time>
+                        <span class="dashboard-request-status">@GetStatusLabel(request)</span>
                     </div>
                     <div class="dashboard-request-actions">
-                        <button type="button" class="dashboard-action-button dashboard-action-accept" @onclick="() => OnAccept.InvokeAsync(request)">
-                            Annehmen
-                        </button>
-                        <button type="button" class="dashboard-action-button dashboard-action-decline" @onclick="() => OnDecline.InvokeAsync(request)">
-                            Ablehnen
-                        </button>
+                        @if (request.Direction == TutorRequestDirection.Incoming && request.Status == TutorRequestStatus.Open)
+                        {
+                            <button type="button" class="dashboard-action-button dashboard-action-accept" @onclick="() => OnAccept.InvokeAsync(request)">
+                                Annehmen
+                            </button>
+                            <button type="button" class="dashboard-action-button dashboard-action-decline" @onclick="() => OnDecline.InvokeAsync(request)">
+                                Ablehnen
+                            </button>
+                        }
+                        else if (request.Direction == TutorRequestDirection.Outgoing && request.Status == TutorRequestStatus.Open)
+                        {
+                            <button type="button" class="dashboard-action-button dashboard-action-decline" @onclick="() => OnCancel.InvokeAsync(request)">
+                                Zur&uuml;ckziehen
+                            </button>
+                        }
+                        else if (request.Direction == TutorRequestDirection.Outgoing
+                            && request.Status is TutorRequestStatus.Accepted or TutorRequestStatus.Declined)
+                        {
+                            <button type="button" class="dashboard-action-button dashboard-action-read" @onclick="() => OnMarkRead.InvokeAsync(request)">
+                                Gelesen
+                            </button>
+                        }
                     </div>
                 </section>
             }
@@ -53,4 +71,53 @@
 
     [Parameter]
     public EventCallback<TutorRequest> OnDecline { get; set; }
+
+    [Parameter]
+    public EventCallback<TutorRequest> OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback<TutorRequest> OnMarkRead { get; set; }
+
+    private static string GetRequestTitle(TutorRequest request)
+    {
+        return request.Direction == TutorRequestDirection.Outgoing
+            ? $"An {request.Name}"
+            : $"Von {request.Name}";
+    }
+
+    private static string GetDirectionLabel(TutorRequest request)
+    {
+        return request.Direction == TutorRequestDirection.Outgoing
+            ? "Outgoing Anfrage"
+            : "Incoming Anfrage";
+    }
+
+    private static string GetStatusLabel(TutorRequest request)
+    {
+        return request.Status switch
+        {
+            TutorRequestStatus.Accepted => "Angenommen",
+            TutorRequestStatus.Declined => "Abgelehnt",
+            TutorRequestStatus.Cancelled => "Zurückgezogen",
+            TutorRequestStatus.Read => "Gelesen",
+            TutorRequestStatus.Unknown => "Unbekannt",
+            _ => request.Direction == TutorRequestDirection.Outgoing ? "Wartet auf Antwort" : "Offen"
+        };
+    }
+
+    private static string GetRequestStateClass(TutorRequest request)
+    {
+        var directionClass = request.Direction == TutorRequestDirection.Outgoing
+            ? "dashboard-request-outgoing"
+            : "dashboard-request-incoming";
+
+        var statusClass = request.Status switch
+        {
+            TutorRequestStatus.Accepted => "dashboard-request-accepted",
+            TutorRequestStatus.Declined => "dashboard-request-declined",
+            _ => "dashboard-request-open"
+        };
+
+        return $"{directionClass} {statusClass}";
+    }
 }

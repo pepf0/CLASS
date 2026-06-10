@@ -503,6 +503,18 @@
 
                 <div class="tutor-modal-actions">
                     <div class="tutor-modal-cta">
+                        @if (SelectedTutor.Subjects.Length > 0)
+                        {
+                            <label class="tutor-request-subject-field">
+                                <span>Fach</span>
+                                <select class="filter-input" @bind="RequestSubject">
+                                    @foreach (var subject in SelectedTutor.Subjects)
+                                    {
+                                        <option value="@subject">@subject</option>
+                                    }
+                                </select>
+                            </label>
+                        }
                         <button type="button" class="tutor-request-button" @onclick="SendTutorRequest">
                             Anfrage senden
                         </button>
@@ -570,6 +582,8 @@
     private List<string> TutorEditValidationMessages { get; set; } = [];
 
     private string RequestMessage { get; set; } = string.Empty;
+
+    private string RequestSubject { get; set; } = string.Empty;
 
     private bool IsDeleteConfirmationVisible { get; set; }
 
@@ -644,6 +658,7 @@
     {
         SelectedTutor = tutor;
         RequestMessage = string.Empty;
+        RequestSubject = tutor.Subjects.FirstOrDefault() ?? string.Empty;
         IsEditingTutorOffer = false;
         TutorEditMessage = string.Empty;
         TutorEditValidationMessages.Clear();
@@ -684,6 +699,7 @@
     {
         SelectedTutor = null;
         RequestMessage = string.Empty;
+        RequestSubject = string.Empty;
         IsEditingTutorOffer = false;
         TutorEditMessage = string.Empty;
         TutorEditSubjectInput = string.Empty;
@@ -740,7 +756,8 @@
         var result = await TutorRequestService.SendRequestAsync(
             UserSessionService.CurrentUser,
             SelectedTutor,
-            UserSessionService.AuthToken);
+            UserSessionService.AuthToken,
+            RequestSubject);
         RequestMessage = result.Success
             ? $"Deine Anfrage an {SelectedTutor.Name} wurde gesendet."
             : result.Message ?? "Die Anfrage konnte nicht gesendet werden.";

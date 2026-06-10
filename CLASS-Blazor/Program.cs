@@ -10,10 +10,12 @@ builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options =>
 {
     options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
 });
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ProfileImageStorageService>();
 builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddScoped<AuthSessionStorageService>();
+builder.Services.AddSingleton<TutorRequestStatusOverlayService>();
 builder.Services.AddHttpClient<DashboardDataService>(client =>
 {
     client.BaseAddress = new Uri("https://pepf.net/api/class/");

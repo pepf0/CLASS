@@ -4,15 +4,19 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CLASS_Blazor.Services;
 
 public sealed class UserProfileService(
     HttpClient httpClient,
     ILogger<UserProfileService> logger,
-    ProfileImageStorageService profileImageStorageService)
+    ProfileImageStorageService profileImageStorageService,
+    IMemoryCache cache)
 {
     private const string UserApiUrl = "user";
+    private const string UsersCacheKey = "class:users";
+    private static readonly TimeSpan UsersCacheDuration = TimeSpan.FromSeconds(45);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -56,6 +60,11 @@ public sealed class UserProfileService(
 
     public async Task<UserListResult> GetUsersAsync(CancellationToken cancellationToken = default)
     {
+        if (cache.TryGetValue(UsersCacheKey, out UserListResult? cachedResult) && cachedResult is not null)
+        {
+            return cachedResult;
+        }
+
         try
         {
             using var response = await httpClient.GetAsync(UserApiUrl, cancellationToken);
@@ -66,7 +75,9 @@ public sealed class UserProfileService(
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            return UserListResult.Loaded(ParseUsers(json));
+            var result = UserListResult.Loaded(ParseUsers(json));
+            cache.Set(UsersCacheKey, result, UsersCacheDuration);
+            return result;
         }
         catch (Exception exception)
         {
@@ -180,6 +191,7 @@ public sealed class UserProfileService(
                 }
             }
 
+            cache.Remove(UsersCacheKey);
             return UserProfileResult.Authenticated(authResponse.User, authResponse.Token);
         }
         catch (Exception exception)
@@ -219,6 +231,11 @@ public sealed class UserProfileService(
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("User profile update failed for user {UserId} with status {StatusCode}.", userId, response.StatusCode);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            cache.Remove(UsersCacheKey);
         }
 
         return response.IsSuccessStatusCode;
